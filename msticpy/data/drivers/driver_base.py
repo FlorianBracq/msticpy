@@ -187,7 +187,7 @@ class DriverBase(ABC):
     @abc.abstractmethod
     def query(
         self, query: str, query_source: Optional[QuerySource] = None, **kwargs
-    ) -> Union[pd.DataFrame, Any]:
+    ) -> pd.DataFrame:
         """
         Execute query string and return DataFrame of results.
 

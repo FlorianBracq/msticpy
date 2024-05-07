@@ -297,7 +297,15 @@ class AzureMonitorDriver(DriverBase):
 
     # pylint: disable=too-many-branches
     def query_with_results(
-        self, query: str, **kwargs
+        self,
+        query: str,
+        progress: bool = True,
+        retry_on_error: bool = False,
+        default_time_params: bool = False,
+        time_span: dict[str, datetime] = {},
+        fail_on_partial: bool = False,
+        timeout: int | None = None,
+        **kwargs,
     ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """
         Execute query string and return DataFrame of results.
@@ -321,9 +329,11 @@ class AzureMonitorDriver(DriverBase):
                 title="Workspace not connected.",
                 help_uri=_HELP_URL,
             )
-        time_span_value = self._get_time_span_value(**kwargs)
-        fail_on_partial = kwargs.get("fail_if_partial", False)
-        server_timeout = kwargs.pop("timeout", self._def_timeout)
+        time_span_value = self._get_time_span_value(
+            default_time_params=default_time_params,
+            time_span=time_span,
+        )
+        server_timeout = timeout or self._def_timeout
 
         workspace_id = next(iter(self._workspace_ids), None) or self._workspace_id
         additional_workspaces = self._workspace_ids[1:] if self._workspace_ids else None
@@ -487,35 +497,36 @@ class AzureMonitorDriver(DriverBase):
             ", ".join(self._workspace_ids),
         )
 
-    def _get_time_span_value(self, **kwargs):
+    def _get_time_span_value(
+        self,
+        *,
+        time_span: dict[str, datetime] = {},
+        default_time_params: bool = False,
+    ) -> tuple[datetime, datetime] | None:
         """Return the timespan for the query API call."""
-        default_time_params = kwargs.get("default_time_params", False)
-        time_params = kwargs.get("time_span", {})
-        start = time_params.get("start")
-        end = time_params.get("end")
+        start = time_span.get("start")
+        end = time_span.get("end")
         if default_time_params or start is None or end is None:
-            time_span_value = None
             logger.info("No time parameters supplied.")
-        else:
-            time_span = TimeSpan(
-                start=time_params["start"],
-                end=time_params["end"],
-            )
-            # Azure Monitor API expects datetime objects, so
-            # convert to datetimes if we have pd.Timestamps
-            t_start = (
-                time_span.start.to_pydatetime(warn=False)
-                if isinstance(time_span.start, pd.Timestamp)
-                else time_span.start
-            )
-            t_end = (
-                time_span.end.to_pydatetime(warn=False)
-                if isinstance(time_span.end, pd.Timestamp)
-                else time_span.end
-            )
-            time_span_value = t_start, t_end
-            logger.info("Time parameters set %s", str(time_span))
-        return time_span_value
+            return None
+        t_span = TimeSpan(
+            start=start,
+            end=end,
+        )
+        # Azure Monitor API expects datetime objects, so
+        # convert to datetimes if we have pd.Timestamps
+        t_start = (
+            t_span.start.to_pydatetime(warn=False)
+            if isinstance(t_span.start, pd.Timestamp)
+            else t_span.start
+        )
+        t_end = (
+            t_span.end.to_pydatetime(warn=False)
+            if isinstance(t_span.end, pd.Timestamp)
+            else t_span.end
+        )
+        logger.info("Time parameters set %s", str(t_span))
+        return t_start, t_end
 
     def _check_table_exists(self, query_source):
         """Check that query table is in the workspace schema."""

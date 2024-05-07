@@ -7,7 +7,7 @@
 import logging
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Iterable, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -22,7 +22,9 @@ from .query_container import QueryContainer
 from .query_defns import DataEnvironment
 from .query_provider_connections_mixin import QueryProviderConnectionsMixin
 from .query_provider_utils_mixin import QueryProviderUtilsMixin
+from .query_source import QuerySource
 from .query_store import QueryStore
+import datetime
 
 __version__ = VERSION
 __author__ = "Ian Hellen"
@@ -55,7 +57,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         self,
         data_environment: Union[str, DataEnvironment],
         driver: Optional[DriverBase] = None,
-        query_paths: Optional[List[str]] = None,
+        query_paths: Optional[list[str]] = None,
         **kwargs,
     ):
         """
@@ -69,7 +71,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             Override the builtin driver (query execution class)
             and use your own driver (must inherit from
             `DriverBase`)
-        query_paths : List[str]
+        query_paths : list[str]
             Additional paths to look for query definitions.
         kwargs :
             Other arguments are passed to the data provider driver.
@@ -116,7 +118,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         logger.info("Using data environment %s", self.environment_name)
         logger.info("Driver class: %s", self.driver_class.__name__)
 
-        self._additional_connections: Dict[str, DriverBase] = {}
+        self._additional_connections: dict[str, DriverBase] = {}
         self._query_provider = driver
         # replace the connect method docstring with that from
         # the driver's connect method
@@ -124,7 +126,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         self.all_queries = QueryContainer()
 
         # Add any query files
-        data_env_queries: Dict[str, QueryStore] = {}
+        data_env_queries: dict[str, QueryStore] = {}
         self._query_paths = query_paths
         if driver.use_query_paths:
             logger.info("Using query paths %s", query_paths)
@@ -212,7 +214,20 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         logger.info("Adding query pivot functions")
         self._add_pivots(lambda: self._query_time.timespan)
 
-    def exec_query(self, query: str, **kwargs) -> Union[pd.DataFrame, Any]:
+    def exec_query(
+        self,
+        query: str,
+        *,
+        time_span: dict[str, datetime.datetime] = {},
+        query_options: dict[str, Any] | None = None,
+        query_source: QuerySource | None = None,
+        progress: bool = True,
+        retry_on_error: bool = False,
+        default_time_params: bool = False,
+        debug: bool = False,
+        connection_str: str | None = None,
+        **provider_params,
+    ) -> pd.DataFrame:
         """
         Execute simple query string.
 
@@ -220,13 +235,13 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         ----------
         query : str
             [description]
-        use_connections : Union[str, List[str]]
+        use_connections : Union[str, list[str]]
 
         Other Parameters
         ----------------
-        query_options : Dict[str, Any]
+        query_options : dict[str, Any]
             Additional options passed to query driver.
-        kwargs : Dict[str, Any]
+        kwargs : dict[str, Any]
             Additional options passed to query driver.
 
         Returns
@@ -236,24 +251,49 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             or a KqlResult if unsuccessful.
 
         """
-        query_options = kwargs.pop("query_options", {}) or kwargs
-        query_source = kwargs.pop("query_source", None)
-
         logger.info("Executing query '%s...'", query[:40])
         logger.debug("Full query: %s", query)
-        logger.debug("Query options: %s", query_options)
+        logger.debug(
+            "Query options: progress: %s, retry_on_error: %s", progress, retry_on_error
+        )
         if not self._additional_connections:
             return self._query_provider.query(
-                query, query_source=query_source, **query_options
+                query,
+                query_source=query_source,
+                progress=progress,
+                retry_on_error=retry_on_error,
+                default_time_params=default_time_params,
+                query_options=query_options,
+                time_span=time_span,
+                debug=debug,
+                connection_str=connection_str,
+                **provider_params,
             )
-        return self._exec_additional_connections(query, **kwargs)
+        return self._exec_additional_connections(
+            query,
+            progress=progress,
+            retry_on_error=retry_on_error,
+            default_time_params=default_time_params,
+            **provider_params,
+        )
 
     @property
     def query_time(self):
         """Return the default QueryTime control for queries."""
         return self._query_time
 
-    def _execute_query(self, *args, **kwargs) -> Union[pd.DataFrame, Any]:
+    def _execute_query(
+        self,
+        *args,
+        query_name: str,
+        query_path: str,
+        split_query_by: str | None = None,
+        split_by: str | None = None,
+        progress: bool = False,
+        retry_on_error: bool = False,
+        connection_str: str | None = None,
+        **kwargs,
+    ) -> pd.DataFrame | str | None:
         if not self._query_provider.loaded:
             raise ValueError("Provider is not loaded.")
         if (
@@ -265,11 +305,10 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
                 "No connection to a data source.",
                 "Please call connect(connection_str) and retry.",
             )
-        query_name = kwargs.pop("query_name")
-        family = kwargs.pop("query_path")
 
-        query_source = self.query_store.get_query(
-            query_path=family, query_name=query_name
+        query_source: QuerySource = self.query_store.get_query(
+            query_path=query_path,
+            query_name=query_name,
         )
         if _help_flag(*args):
             query_source.help()
@@ -278,40 +317,52 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         params, missing = extract_query_params(query_source, *args, **kwargs)
         logger.debug("Template query: %s", query_source.query)
         logger.info("Parameters for query: %s", params)
-        query_options = {
-            "default_time_params": self._check_for_time_params(params, missing)
-        }
+
+        default_time_params: bool = self._check_for_time_params(params, missing)
+
         if missing:
             query_source.help()
             raise ValueError(f"No values found for these parameters: {missing}")
 
-        split_by = kwargs.pop("split_query_by", kwargs.pop("split_by", None))
-        if split_by:
-            logger.info("Split query selected - interval - %s", split_by)
-            split_result = self._exec_split_query(
-                split_by=split_by,
+        if split_by or split_query_by:
+            split: str = split_by or split_query_by
+            logger.info("Split query selected - interval - %s", split)
+            split_result: pd.DataFrame | str | None = self._exec_split_query(
+                split_by=split,
                 query_source=query_source,
-                query_params=params,
                 debug=_debug_flag(*args, **kwargs),
                 args=args,
-                **kwargs,
+                **params,
             )
             if split_result is not None:
                 return split_result
             # if split queries could not be created, fall back to default
-        query_str = query_source.create_query(
+
+        query_str: str = query_source.create_query(
             formatters=self._query_provider.formatters, **params
         )
         # This looks for any of the "print query" debug args in args or kwargs
         if _debug_flag(*args, **kwargs):
             return query_str
 
-        # Handle any query options passed and run the query
-        query_options.update(self._get_query_options(params, kwargs))
         logger.info(
-            "Running query '%s...' with params: %s", query_str[:40], query_options
+            "Running query '%s...' with params: progress: %s, retry_on_error: %s",
+            query_str[:40],
+            progress,
+            retry_on_error,
         )
-        return self.exec_query(query_str, query_source=query_source, **query_options)
+
+        query_result: pd.DataFrame = self.exec_query(
+            query_str,
+            query_source=query_source,
+            progress=progress,
+            retry_on_error=retry_on_error,
+            default_time_params=default_time_params,
+            connection_str=connection_str,
+            **{key: value for key, value in kwargs.items() if key not in params},
+        )
+
+        return query_result
 
     def _check_for_time_params(self, params, missing) -> bool:
         """Fall back on builtin query time if no time parameters were supplied."""
@@ -326,7 +377,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             defaults_added = True
         return defaults_added
 
-    def _get_query_folder_for_env(self, root_path: str, environment: str) -> List[Path]:
+    def _get_query_folder_for_env(self, root_path: str, environment: str) -> list[Path]:
         """Return query folder for current environment."""
         data_envs = [environment]
         if environment.casefold() in _COMPATIBLE_DRIVER_MAPPINGS:
@@ -336,10 +387,10 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             for data_env in data_envs
         ]
 
-    def _read_queries_from_paths(self, query_paths) -> Dict[str, QueryStore]:
+    def _read_queries_from_paths(self, query_paths) -> dict[str, QueryStore]:
         """Fetch queries from YAML files in specified paths."""
-        settings: Dict[str, Any] = get_config("QueryDefinitions", {})
-        all_query_paths: List[Union[Path, str]] = []
+        settings: dict[str, Any] = get_config("QueryDefinitions", {})
+        all_query_paths: list[Union[Path, str]] = []
         for def_qry_path in settings.get("Default"):  # type: ignore
             # only read queries from environment folder
             builtin_qry_paths = self._get_query_folder_for_env(
@@ -388,7 +439,9 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
 
             # Create the partial function
             query_func = partial(
-                self._execute_query, query_path=query_cont_name, query_name=query_name
+                self._execute_query,
+                query_path=query_cont_name,
+                query_name=query_name,
             )
             query_func.__doc__ = self.query_store.get_query(
                 query_path=query_cont_name, query_name=query_name
@@ -398,7 +451,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             setattr(current_node, query_name, query_func)
             setattr(self.all_queries, query_name, query_func)
 
-    def _add_driver_queries(self, queries: Iterable[Dict[str, str]]):
+    def _add_driver_queries(self, queries: Iterable[dict[str, str]]):
         """Add driver queries to the query store."""
         for query in queries:
             self.query_store.add_query(
@@ -416,8 +469,8 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
 
     @staticmethod
     def _get_query_options(
-        params: Dict[str, Any], kwargs: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        params: dict[str, Any], kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
         # sourcery skip: inline-immediately-returned-variable, use-or-for-fallback
         """Return any kwargs not already in params."""
         query_options = kwargs.pop("query_options", {})

@@ -109,7 +109,14 @@ class KustoDriver(KqlDriver):
         )
 
     def query(
-        self, query: str, query_source: QuerySource = None, **kwargs
+        self,
+        query: str,
+        query_source: QuerySource = None,
+        *,
+        cluster: str | None = None,
+        database: str | None = None,
+        connection_str: str | None = None,
+        **kwargs,
     ) -> Union[pd.DataFrame, Any]:
         """
         Execute query string and return DataFrame of results.
@@ -140,28 +147,36 @@ class KustoDriver(KqlDriver):
 
         """
         new_connection = self._get_connection_string(
-            query_source=query_source, **kwargs
+            query_source=query_source,
+            cluster=cluster,
+            database=database,
+            connection_str=connection_str,
         )
         if new_connection:
             self.current_connection = new_connection
         data, result = self.query_with_results(query)
         return data if data is not None else result
 
-    def _get_connection_string(self, query_source: QuerySource = None, **kwargs):
+    def _get_connection_string(
+        self,
+        query_source: QuerySource = None,
+        *,
+        connection_str: str | None = None,
+        database: str | None = None,
+        cluster: str | None = None,
+        **kwargs,
+    ):
         """Create a connection string from arguments and configuration."""
         # If the connection string is supplied as a parameter, use that
-        cluster = None
-        new_connection = kwargs.get("connection_str")
-        database = kwargs.get("database")
-        if not new_connection:
+        if not connection_str:
             # try to get cluster and db from kwargs or query_source metadata
-            cluster = self._lookup_cluster(kwargs.get("cluster", "Kusto"))
+            cluster = self._lookup_cluster(cluster=cluster or "Kusto")
             if cluster and database:
-                new_connection = self._create_connection(
+                connection_str = self._create_connection(
                     cluster=cluster, database=database
                 )
                 self._cluster_uri = cluster
-        if not new_connection and query_source:
+        if not connection_str and query_source:
             # try to get cluster and db from query_source metadata
             cluster = cluster or query_source.metadata.get("cluster")
             database = (
@@ -169,9 +184,9 @@ class KustoDriver(KqlDriver):
                 or query_source.metadata.get("database")
                 or self._get_db_from_datafamily(query_source, cluster, database)
             )
-            new_connection = self._create_connection(cluster=cluster, database=database)
+            connection_str = self._create_connection(cluster=cluster, database=database)
             self._cluster_uri = cluster
-        return new_connection
+        return connection_str
 
     def _get_db_from_datafamily(self, query_source, cluster, database):
         data_families = query_source.metadata.get("data_families")

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import partial
 from itertools import tee
-from typing import Any, Dict, List, Optional, Protocol, Tuple, Union
+from typing import Any, Optional, Protocol, Union, TYPE_CHECKING
 
 import nest_asyncio
 import pandas as pd
@@ -21,6 +21,9 @@ from ...common.exceptions import MsticpyDataQueryError
 from ...common.utility.ipython import is_ipython
 from ..drivers.driver_base import DriverBase, DriverProps
 from .query_source import QuerySource
+
+if TYPE_CHECKING:
+    from asyncio import AbstractEventLoop, Future
 
 __version__ = VERSION
 __author__ = "Ian Hellen"
@@ -33,8 +36,8 @@ class QueryProviderProtocol(Protocol):
     """Protocol for required properties of QueryProvider class."""
 
     driver_class: Any
-    _driver_kwargs: Dict[str, Any]
-    _additional_connections: Dict[str, Any]
+    _driver_kwargs: dict[str, Any]
+    _additional_connections: dict[str, Any]
     _query_provider: DriverBase
 
     def exec_query(self, query: str, **kwargs) -> Union[pd.DataFrame, Any]:
@@ -44,8 +47,8 @@ class QueryProviderProtocol(Protocol):
     # fmt: off
     @staticmethod
     def _get_query_options(
-        params: Dict[str, Any], kwargs: Dict[str, Any]
-    ) -> Dict[str, Any]:
+        params: dict[str, Any], kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
         ...
     # fmt: on
 
@@ -72,7 +75,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
 
         Other Parameters
         ----------------
-        kwargs : Dict[str, Any]
+        kwargs : dict[str, Any]
             Other connection parameters passed to the driver.
 
         Notes
@@ -89,13 +92,13 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         driver_key = alias or str(len(self._additional_connections))
         self._additional_connections[driver_key] = new_driver
 
-    def list_connections(self) -> List[str]:
+    def list_connections(self) -> list[str]:
         """
         Return a list of current connections.
 
         Returns
         -------
-        List[str]
+        list[str]
             The alias and connection string for each connection.
 
         """
@@ -106,7 +109,14 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         return [f"Default: {self._query_provider.current_connection}", *add_connections]
 
     # pylint: disable=too-many-locals
-    def _exec_additional_connections(self, query, **kwargs) -> pd.DataFrame:
+    def _exec_additional_connections(
+        self,
+        query: str,
+        *,
+        progress: bool = True,
+        retry_on_error: bool = False,
+        **kwargs,
+    ) -> pd.DataFrame:
         """
         Return results of query run query against additional connections.
 
@@ -118,7 +128,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             Show progress bar, by default True
         retry_on_error: bool, optional
             Retry failed queries, by default False
-        **kwargs : Dict[str, Any]
+        **kwargs : dict[str, Any]
             Additional keyword arguments to pass to the query method.
 
         Returns
@@ -135,10 +145,8 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         Otherwise, the queries are executed sequentially.
 
         """
-        progress = kwargs.pop("progress", True)
-        retry = kwargs.pop("retry_on_error", False)
         # Add the initial connection
-        query_tasks = {
+        query_tasks: dict[str, Any] = {
             self._query_provider.current_connection
             or "0": partial(
                 self._query_provider.query,
@@ -158,22 +166,35 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         # Run the queries threaded if supported
         if self._query_provider.get_driver_property(DriverProps.SUPPORTS_THREADING):
             logger.info("Running threaded queries.")
-            event_loop = _get_event_loop()
+            event_loop: AbstractEventLoop = _get_event_loop()
             return event_loop.run_until_complete(
-                self._exec_queries_threaded(query_tasks, progress, retry)
+                self._exec_queries_threaded(
+                    query_tasks,
+                    progress=progress,
+                    retry_on_error=retry_on_error,
+                )
             )
 
         # standard synchronous execution
         print(f"Running query for {len(self._additional_connections)} connections.")
-        return self._exec_synchronous_queries(progress, query_tasks)
+        return self._exec_synchronous_queries(
+            progress=progress,
+            query_tasks=query_tasks,
+        )
 
     def _exec_split_query(
         self,
         split_by: str,
+        *,
         query_source: QuerySource,
-        query_params: Dict[str, Any],
-        **kwargs,
-    ) -> Union[pd.DataFrame, str, None]:
+        args: tuple,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        progress: bool = True,
+        retry_on_error: bool = False,
+        debug: bool = False,
+        **query_params,
+    ) -> pd.DataFrame | str | None:
         """
         Execute a query that is split into multiple queries.
 
@@ -183,7 +204,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             The time interval to split the query by.
         query_source : QuerySource
             The query to execute.
-        query_params : Dict[str, Any]
+        query_params : dict[str, Any]
             The parameters to pass to the query.
 
         Other Parameters
@@ -194,7 +215,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             Show progress bar, by default True
         retry_on_error: bool, optional
             Retry failed queries, by default False
-        **kwargs : Dict[str, Any]
+        **kwargs : dict[str, Any]
             Additional keyword arguments to pass to the query method.
 
         Returns
@@ -209,21 +230,16 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         executed asynchronously. Otherwise, the queries are executed sequentially.
 
         """
-        start = query_params.pop("start", None)
-        end = query_params.pop("end", None)
-        progress = kwargs.pop("progress", True)
-        retry = kwargs.pop("retry_on_error", False)
-        debug = kwargs.pop("debug", False)
         if not (start or end):
             print("Cannot split a query with no 'start' and 'end' parameters")
             return None
 
         split_queries = self._create_split_queries(
             query_source=query_source,
-            query_params=query_params,
             start=start,
             end=end,
             split_by=split_by,
+            query_params=query_params,
         )
         if debug:
             return "\n\n".join(
@@ -231,51 +247,75 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
                 for (start, end), query in split_queries.items()
             )
 
-        query_tasks = self._create_split_query_tasks(
-            query_source, query_params, split_queries, **kwargs
+        query_tasks: dict[str, partial] = self._create_split_query_tasks(
+            query_source=query_source,
+            split_queries=split_queries,
+            progress=progress,
+            retry_on_error=retry_on_error,
+            debug=debug,
+            **query_params,
         )
         # Run the queries threaded if supported
         if self._query_provider.get_driver_property(DriverProps.SUPPORTS_THREADING):
             logger.info("Running threaded queries.")
-            event_loop = _get_event_loop()
+            event_loop: AbstractEventLoop = _get_event_loop()
             return event_loop.run_until_complete(
-                self._exec_queries_threaded(query_tasks, progress, retry)
+                self._exec_queries_threaded(
+                    query_tasks,
+                    progress=progress,
+                    retry_on_error=retry_on_error,
+                )
             )
 
         # or revert to standard synchronous execution
-        return self._exec_synchronous_queries(progress, query_tasks)
+        return self._exec_synchronous_queries(
+            progress=progress,
+            query_tasks=query_tasks,
+        )
 
     def _create_split_query_tasks(
         self,
         query_source: QuerySource,
-        query_params: Dict[str, Any],
-        split_queries,
+        split_queries: dict[str, Any],
+        *,
+        progress: bool = True,
+        retry_on_error: bool = False,
+        debug: bool = False,
         **kwargs,
-    ) -> Dict[str, partial]:
+    ) -> dict[str, partial]:
         """Return dictionary of partials to execute queries."""
         # Retrieve any query options passed (other than query params)
-        query_options = self._get_query_options(query_params, kwargs)
-        logger.info("query_options: %s", query_options)
+        logger.info(
+            "query_options: %s",
+            {
+                "progress": progress,
+                "debug": debug,
+                "retry_on_error": retry_on_error,
+            },
+        )
         logger.info("kwargs: %s", kwargs)
-        if "time_span" in query_options:
-            del query_options["time_span"]
         return {
             f"{start}-{end}": partial(
                 self.exec_query,
                 query=query_str,
                 query_source=query_source,
                 time_span={"start": start, "end": end},
-                **query_options,
+                progress=progress,
+                debug=debug,
+                retry_on_error=retry_on_error,
+                **kwargs,
             )
             for (start, end), query_str in split_queries.items()
         }
 
     @staticmethod
     def _exec_synchronous_queries(
-        progress: bool, query_tasks: Dict[str, Any]
+        *,
+        progress: bool,
+        query_tasks: dict[str, Any],
     ) -> pd.DataFrame:
         logger.info("Running queries sequentially.")
-        results: List[pd.DataFrame] = []
+        results: list[pd.DataFrame] = []
         if progress:
             query_iter = tqdm(query_tasks.items(), unit="sub-queries", desc="Running")
         else:
@@ -290,23 +330,27 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
     def _create_split_queries(
         self,
         query_source: QuerySource,
-        query_params: Dict[str, Any],
+        query_params: dict[str, Any],
         start: datetime,
         end: datetime,
         split_by: str,
-    ) -> Dict[Tuple[datetime, datetime], str]:
+    ) -> dict[tuple[datetime, datetime], str]:
         """Return separate queries for split time ranges."""
+        split_delta: pd.Timedelta = pd.Timedelta("1D")
         try:
             if split_by.strip().endswith("H"):
                 split_by = split_by.replace("H", "h")
             split_delta = pd.Timedelta(split_by)
         except ValueError:
-            split_delta = pd.Timedelta("1D")
+            pass
         logger.info("Using split delta %s", split_delta)
 
-        ranges = _calc_split_ranges(start, end, split_delta)
+        ranges: list[tuple[datetime, datetime]] = _calc_split_ranges(
+            start, end, split_delta
+        )
 
-        split_queries = {
+        logger.info("Split query into %s chunks", len(ranges))
+        return {
             (q_start, q_end): query_source.create_query(
                 formatters=self._query_provider.formatters,
                 start=q_start,
@@ -315,19 +359,18 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             )
             for q_start, q_end in ranges
         }
-        logger.info("Split query into %s chunks", len(split_queries))
-        return split_queries
 
     async def _exec_queries_threaded(
         self,
-        query_tasks: Dict[str, partial],
+        query_tasks: dict[str, partial],
+        *,
         progress: bool = True,
-        retry: bool = False,
+        retry_on_error: bool = False,
     ) -> pd.DataFrame:
         """Return results of multiple queries run as threaded tasks."""
         logger.info("Running threaded queries for %d connections.", len(query_tasks))
 
-        event_loop = _get_event_loop()
+        event_loop: AbstractEventLoop = _get_event_loop()
 
         with ThreadPoolExecutor(
             max_workers=self._query_provider.get_driver_property(
@@ -335,12 +378,12 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             )
         ) as executor:
             # add the additional connections
-            thread_tasks = {
+            thread_tasks: dict[str, Future] = {
                 query_id: event_loop.run_in_executor(executor, query_func)
                 for query_id, query_func in query_tasks.items()
             }
-            results: List[pd.DataFrame] = []
-            failed_tasks: Dict[str, asyncio.Future] = {}
+            results: list[pd.DataFrame] = []
+            failed_tasks: dict[str, asyncio.Future] = {}
             if progress:
                 task_iter = tqdm(
                     asyncio.as_completed(thread_tasks.values()),
@@ -349,10 +392,10 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
                 )
             else:
                 task_iter = asyncio.as_completed(thread_tasks.values())
-            ids_and_tasks = dict(zip(thread_tasks, task_iter))
+            ids_and_tasks: dict[str, Future] = dict(zip(thread_tasks, task_iter))
             for query_id, thread_task in ids_and_tasks.items():
                 try:
-                    result = await thread_task
+                    result: pd.DataFrame = await thread_task
                     logger.info("Query task '%s' completed successfully.", query_id)
                     results.append(result)
                 except Exception:  # pylint: disable=broad-exception-caught
@@ -362,7 +405,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
                     )
                     failed_tasks[query_id] = thread_task
 
-            if retry and failed_tasks:
+            if retry_on_error and failed_tasks:
                 for query_id, thread_task in failed_tasks.items():
                     try:
                         logger.info("Retrying query task '%s'", query_id)
