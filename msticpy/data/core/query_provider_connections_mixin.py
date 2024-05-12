@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from functools import partial
 from itertools import tee
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol, Tuple, Union
 
 import nest_asyncio
 import pandas as pd
@@ -37,8 +37,8 @@ class QueryProviderProtocol(Protocol):
     """Protocol for required properties of QueryProvider class."""
 
     driver_class: Any
-    _driver_kwargs: dict[str, Any]
-    _additional_connections: dict[str, Any]
+    _driver_kwargs: Dict[str, Any]
+    _additional_connections: Dict[str, Any]
     _query_provider: DriverBase
 
     @staticmethod
@@ -64,14 +64,14 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         self,
         query: str,
         *,
-        time_span: dict[str, datetime.datetime] = {},
-        query_options: dict[str, Any] | None = None,
-        query_source: QuerySource | None = None,
+        time_span: Dict[str, datetime],
+        query_options: Union[Dict[str, Any], None] = None,
+        query_source: Union[QuerySource, None] = None,
         progress: bool = True,
         retry_on_error: bool = False,
         default_time_params: bool = False,
         debug: bool = False,
-        connection_str: str | None = None,
+        connection_str: Union[str, None] = None,
         **provider_params,
     ) -> pd.DataFrame:
         """
@@ -141,7 +141,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
 
         Other Parameters
         ----------------
-        kwargs : dict[str, Any]
+        kwargs : Dict[str, Any]
             Other connection parameters passed to the driver.
 
         Notes
@@ -158,13 +158,13 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         driver_key = alias or str(len(self._additional_connections))
         self._additional_connections[driver_key] = new_driver
 
-    def list_connections(self) -> list[str]:
+    def list_connections(self) -> List[str]:
         """
         Return a list of current connections.
 
         Returns
         -------
-        list[str]
+        List[str]
             The alias and connection string for each connection.
 
         """
@@ -194,7 +194,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             Show progress bar, by default True
         retry_on_error: bool, optional
             Retry failed queries, by default False
-        **kwargs : dict[str, Any]
+        **kwargs : Dict[str, Any]
             Additional keyword arguments to pass to the query method.
 
         Returns
@@ -212,7 +212,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
 
         """
         # Add the initial connection
-        query_tasks: dict[str, Any] = {
+        query_tasks: Dict[str, Any] = {
             self._query_provider.current_connection
             or "0": partial(
                 self._query_provider.query,
@@ -257,14 +257,13 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         split_by: str,
         *,
         query_source: QuerySource,
-        args: tuple,
-        start: datetime | None = None,
-        end: datetime | None = None,
+        start: datetime,
+        end: datetime,
         progress: bool = True,
         retry_on_error: bool = False,
         debug: bool = False,
         **query_params,
-    ) -> pd.DataFrame | str | None:
+    ) -> Union[pd.DataFrame, str, None]:
         """
         Execute a query that is split into multiple queries.
 
@@ -274,7 +273,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             The time interval to split the query by.
         query_source : QuerySource
             The query to execute.
-        query_params : dict[str, Any]
+        query_params : Dict[str, Any]
             The parameters to pass to the query.
 
         Other Parameters
@@ -285,7 +284,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             Show progress bar, by default True
         retry_on_error: bool, optional
             Retry failed queries, by default False
-        **kwargs : dict[str, Any]
+        **kwargs : Dict[str, Any]
             Additional keyword arguments to pass to the query method.
 
         Returns
@@ -300,16 +299,14 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         executed asynchronously. Otherwise, the queries are executed sequentially.
 
         """
-        if not (start or end):
-            print("Cannot split a query with no 'start' and 'end' parameters")
-            return None
-
-        split_queries = self._create_split_queries(
-            query_source=query_source,
-            start=start,
-            end=end,
-            split_by=split_by,
-            query_params=query_params,
+        split_queries: Dict[Tuple[datetime, datetime], str] = (
+            self._create_split_queries(
+                query_source=query_source,
+                start=start,
+                end=end,
+                split_by=split_by,
+                query_params=query_params,
+            )
         )
         if debug:
             return "\n\n".join(
@@ -317,7 +314,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
                 for (start, end), query in split_queries.items()
             )
 
-        query_tasks: dict[str, partial] = self._create_split_query_tasks(
+        query_tasks: Dict[str, partial] = self._create_split_query_tasks(
             query_source=query_source,
             split_queries=split_queries,
             progress=progress,
@@ -350,13 +347,13 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
     def _create_split_query_tasks(
         self,
         query_source: QuerySource,
-        split_queries: dict[str, Any],
+        split_queries: Dict[Tuple[datetime, datetime], str],
         *,
         progress: bool = True,
         retry_on_error: bool = False,
         debug: bool = False,
         **kwargs,
-    ) -> dict[str, partial]:
+    ) -> Dict[str, partial]:
         """Return dictionary of partials to execute queries."""
         # Retrieve any query options passed (other than query params)
         logger.info(
@@ -386,10 +383,10 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
     def _exec_synchronous_queries(
         *,
         progress: bool,
-        query_tasks: dict[str, Any],
+        query_tasks: Dict[str, Any],
     ) -> pd.DataFrame:
         logger.info("Running queries sequentially.")
-        results: list[pd.DataFrame] = []
+        results: List[pd.DataFrame] = []
         if progress:
             query_iter = tqdm(query_tasks.items(), unit="sub-queries", desc="Running")
         else:
@@ -408,11 +405,11 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
     def _create_split_queries(
         self,
         query_source: QuerySource,
-        query_params: dict[str, Any],
+        query_params: Dict[str, Any],
         start: datetime,
         end: datetime,
         split_by: str,
-    ) -> dict[tuple[datetime, datetime], str]:
+    ) -> Dict[Tuple[datetime, datetime], str]:
         """Return separate queries for split time ranges."""
         split_delta: pd.Timedelta = pd.Timedelta("1D")
         try:
@@ -423,7 +420,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             pass
         logger.info("Using split delta %s", split_delta)
 
-        ranges: list[tuple[datetime, datetime]] = _calc_split_ranges(
+        ranges: List[Tuple[datetime, datetime]] = _calc_split_ranges(
             start, end, split_delta
         )
 
@@ -453,7 +450,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # add the additional connections
-            thread_tasks: dict[str, Future] = {
+            thread_tasks: Dict[str, Future] = {
                 query_id: event_loop.run_in_executor(executor, query_func)
                 for query_id, query_func in query_tasks.items()
             }
@@ -467,7 +464,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
                 )
             else:
                 task_iter = asyncio.as_completed(thread_tasks.values())
-            ids_and_tasks: dict[str, Future] = dict(zip(thread_tasks, task_iter))
+            ids_and_tasks: Dict[str, Future] = dict(zip(thread_tasks, task_iter))
             for query_id, thread_task in ids_and_tasks.items():
                 try:
                     result: pd.DataFrame = await thread_task

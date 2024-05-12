@@ -97,7 +97,7 @@ class QuerySource:
         # consolidate source metadata - source-specific
         # overrides global
         # add an empty dict in case neither has defined params
-        self.metadata = collapse_dicts(
+        self.metadata: Dict[str, Union[str, List[str]]] = collapse_dicts(
             self._global_metadata,
             self.defaults.get("metadata", {}),
             self._source.get("metadata", {}),

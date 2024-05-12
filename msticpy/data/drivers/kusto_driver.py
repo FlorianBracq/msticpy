@@ -49,7 +49,7 @@ class KustoDriver(KqlDriver):
         self.set_driver_property(DriverProps.EFFECTIVE_ENV, DataEnvironment.Kusto.name)
         self._connected = True
         self._kusto_settings: KustoClusterSettings = _get_kusto_settings()
-        self._cluster_uri = None
+        self._cluster_uri: Union[str, None] = None
 
     def connect(self, connection_str: Optional[str] = None, **kwargs):
         """
@@ -113,9 +113,9 @@ class KustoDriver(KqlDriver):
         query: str,
         query_source: QuerySource = None,
         *,
-        cluster: str | None = None,
-        database: str | None = None,
-        connection_str: str | None = None,
+        cluster: Union[str, None] = None,
+        database: Union[str, None] = None,
+        connection_str: Union[str, None] = None,
         **kwargs,
     ) -> Union[pd.DataFrame, Any]:
         """
@@ -154,17 +154,16 @@ class KustoDriver(KqlDriver):
         )
         if new_connection:
             self.current_connection = new_connection
-        data, result = self.query_with_results(query)
+        data, result = self.query_with_results(query, **kwargs)
         return data if data is not None else result
 
     def _get_connection_string(
         self,
-        query_source: QuerySource = None,
+        query_source: Union[QuerySource, None] = None,
         *,
-        connection_str: str | None = None,
-        database: str | None = None,
-        cluster: str | None = None,
-        **kwargs,
+        connection_str: Union[str, None] = None,
+        database: Union[str, None] = None,
+        cluster: Union[str, None] = None,
     ):
         """Create a connection string from arguments and configuration."""
         # If the connection string is supplied as a parameter, use that

@@ -297,16 +297,14 @@ class AzureMonitorDriver(DriverBase):
         return data if data is not None else result
 
     # pylint: disable=too-many-branches
-    def query_with_results(
+    def query_with_results(  # pylint: disable=too-many-locals
         self,
         query: str,
-        progress: bool = True,
-        retry_on_error: bool = False,
+        *,
+        time_span: Dict[str, datetime],
         default_time_params: bool = False,
-        time_span: dict[str, datetime] = {},
         fail_on_partial: bool = False,
-        timeout: int | None = None,
-        **kwargs,
+        timeout: Union[int, None] = None,
     ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """
         Execute query string and return DataFrame of results.
@@ -516,9 +514,9 @@ class AzureMonitorDriver(DriverBase):
     def _get_time_span_value(
         self,
         *,
-        time_span: dict[str, datetime] = {},
+        time_span: Dict[str, datetime],
         default_time_params: bool = False,
-    ) -> tuple[datetime, datetime] | None:
+    ) -> Union[Tuple[datetime, datetime], None]:
         """Return the timespan for the query API call."""
         start = time_span.get("start")
         end = time_span.get("end")

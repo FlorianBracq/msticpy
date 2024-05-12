@@ -737,7 +737,7 @@ class AzureKustoDriver(DriverBase):
 
     def _cluster_groups_match(self, query_source: QuerySource) -> bool:
         """Return True if query source cluster group is valid for current cluster."""
-        source_cluster_groups = query_source.metadata.get(
+        source_cluster_groups: List[str] = query_source.metadata.get(
             QuerySourceFields.CLUSTER_GROUPS, []
         )
         if (
@@ -761,7 +761,9 @@ class AzureKustoDriver(DriverBase):
             self.cluster_name.casefold(),
             self.cluster_config_name.casefold(),
         }
-        source_clusters = query_source.metadata.get(QuerySourceFields.CLUSTERS, [])
+        source_clusters: List[str] = query_source.metadata.get(
+            QuerySourceFields.CLUSTERS, []
+        )
         if source_clusters:
             query_source_clusters = {cluster.casefold() for cluster in source_clusters}
             result |= bool(cluster_ids.intersection(query_source_clusters))

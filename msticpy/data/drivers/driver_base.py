@@ -7,6 +7,7 @@
 import abc
 from abc import ABC
 from collections import defaultdict
+from datetime import datetime
 from typing import Any, Dict, Iterable, Optional, Set, Tuple, Union
 
 import pandas as pd
@@ -212,7 +213,15 @@ class DriverBase(ABC):
         """
 
     @abc.abstractmethod
-    def query_with_results(self, query: str, **kwargs) -> Tuple[pd.DataFrame, Any]:
+    def query_with_results(
+        self,
+        query: str,
+        *,
+        time_span: Dict[str, datetime],
+        default_time_params: bool = False,
+        fail_on_partial: bool = False,
+        timeout: Union[int, None] = None,
+    ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """
         Execute query string and return DataFrame plus native results.
 
@@ -223,7 +232,7 @@ class DriverBase(ABC):
 
         Returns
         -------
-        Tuple[pd.DataFrame,Any]
+        Tuple[pd.DataFrame, Dict[str, Any]]
             A DataFrame and native results.
 
         """
