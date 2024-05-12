@@ -95,7 +95,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         # pylint: enable=import-outside-toplevel
         setattr(self.__class__, "_add_pivots", add_data_queries_to_entities)
 
-        data_environment, self.environment_name = self._check_environment(
+        data_environment, self.environment_name = QueryProvider._check_environment(
             data_environment
         )
 
@@ -141,8 +141,9 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         self._query_time = QueryTime(units="day")
         logger.info("Initialization complete.")
 
+    @classmethod
     def _check_environment(
-        self, data_environment
+        cls, data_environment
     ) -> Tuple[Union[str, DataEnvironment], str]:
         """Check environment against known names."""
         if isinstance(data_environment, str):
@@ -213,69 +214,6 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         # Since we're now connected, add Pivot functions
         logger.info("Adding query pivot functions")
         self._add_pivots(lambda: self._query_time.timespan)
-
-    def exec_query(
-        self,
-        query: str,
-        *,
-        time_span: dict[str, datetime.datetime] = {},
-        query_options: dict[str, Any] | None = None,
-        query_source: QuerySource | None = None,
-        progress: bool = True,
-        retry_on_error: bool = False,
-        default_time_params: bool = False,
-        debug: bool = False,
-        connection_str: str | None = None,
-        **provider_params,
-    ) -> pd.DataFrame:
-        """
-        Execute simple query string.
-
-        Parameters
-        ----------
-        query : str
-            [description]
-        use_connections : Union[str, list[str]]
-
-        Other Parameters
-        ----------------
-        query_options : dict[str, Any]
-            Additional options passed to query driver.
-        kwargs : dict[str, Any]
-            Additional options passed to query driver.
-
-        Returns
-        -------
-        Union[pd.DataFrame, Any]
-            Query results - a DataFrame if successful
-            or a KqlResult if unsuccessful.
-
-        """
-        logger.info("Executing query '%s...'", query[:40])
-        logger.debug("Full query: %s", query)
-        logger.debug(
-            "Query options: progress: %s, retry_on_error: %s", progress, retry_on_error
-        )
-        if not self._additional_connections:
-            return self._query_provider.query(
-                query,
-                query_source=query_source,
-                progress=progress,
-                retry_on_error=retry_on_error,
-                default_time_params=default_time_params,
-                query_options=query_options,
-                time_span=time_span,
-                debug=debug,
-                connection_str=connection_str,
-                **provider_params,
-            )
-        return self._exec_additional_connections(
-            query,
-            progress=progress,
-            retry_on_error=retry_on_error,
-            default_time_params=default_time_params,
-            **provider_params,
-        )
 
     @property
     def query_time(self):
