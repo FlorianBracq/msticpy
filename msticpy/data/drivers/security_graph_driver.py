@@ -4,14 +4,16 @@
 # license information.
 # --------------------------------------------------------------------------
 """Security Graph OData Driver class."""
-from typing import Any, Optional, Union
+from typing import Optional, Union, List
 
 import pandas as pd
+
+from msticpy.data.core.query_defns import DataEnvironment
 
 from ..._version import VERSION
 from ...auth.azure_auth_core import AzureCloudConfig
 from ...common.utility import export
-from .odata_driver import OData, QuerySource
+from .odata_driver import OData
 
 __version__ = VERSION
 __author__ = "Ian Hellen"
@@ -22,9 +24,20 @@ class SecurityGraphDriver(OData):
     """Driver to query security graph."""
 
     CONFIG_NAME = "MicrosoftGraph"
-    _ALT_CONFIG_NAMES = ["SecurityGraphApp"]
+    _ALT_CONFIG_NAMES: List[str] = ["SecurityGraphApp"]
 
-    def __init__(self, connection_str: Optional[str] = None, **kwargs):
+    def __init__(
+        self,
+        data_environment: Optional[
+            Union[str, DataEnvironment]
+        ] = DataEnvironment.SecurityGraph,
+        connection_str: Optional[str] = None,
+        *,
+        max_threads: int = 4,
+        debug: bool = False,
+        cloud: Optional[str] = None,
+        api_ver: str = "v1.0",
+    ) -> None:
         """
         Instantiate MSGraph driver and optionally connect.
 
@@ -34,8 +47,12 @@ class SecurityGraphDriver(OData):
             Connection string
 
         """
-        super().__init__(**kwargs)
-        az_cloud_config = AzureCloudConfig(cloud=kwargs.pop("cloud", None))
+        super().__init__(
+            data_environment=data_environment,
+            max_threads=max_threads,
+            debug=debug,
+        )
+        az_cloud_config = AzureCloudConfig(cloud=cloud)
         self.scopes = ["User.Read"]
         self.api_root = az_cloud_config.endpoints.get("microsoftGraphResourceId")
         self.req_body = {
@@ -44,17 +61,18 @@ class SecurityGraphDriver(OData):
             "grant_type": "client_credentials",
             "scope": f"{self.api_root}.default",
         }
-        login_endpoint = az_cloud_config.authority_uri
+        login_endpoint: str = az_cloud_config.authority_uri
         self.oauth_url = f"{login_endpoint}{{tenantId}}/oauth2/v2.0/token"
-        self.api_ver = kwargs.get("api_ver", "v1.0")
+        self.api_ver = api_ver
 
         if connection_str:
             self.current_connection = connection_str
             self.connect(connection_str)
 
     def query(
-        self, query: str, query_source: Optional[QuerySource] = None, **kwargs
-    ) -> Union[pd.DataFrame, Any]:
+        self,
+        query: str,
+    ) -> pd.DataFrame:
         """
         Execute query string and return DataFrame of results.
 
@@ -62,8 +80,6 @@ class SecurityGraphDriver(OData):
         ----------
         query : str
             The query to execute
-        query_source : QuerySource
-            The query definition object
 
         Returns
         -------
@@ -72,5 +88,4 @@ class SecurityGraphDriver(OData):
             the underlying provider result if an error.
 
         """
-        del query_source, kwargs
         return self.query_with_results(query, body=False)[0]

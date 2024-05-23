@@ -18,13 +18,15 @@ import contextlib
 import logging
 import warnings
 from datetime import datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, Iterable, List, NoReturn, Optional, Tuple, Union, cast
 
 import httpx
 import pandas as pd
 from azure.core.exceptions import HttpResponseError
 from azure.core.pipeline.policies import UserAgentPolicy
 from pkg_resources import parse_version
+
+from msticpy.auth.azure_auth_core import AzCredentials
 
 from ..._version import VERSION
 from ...auth.azure_auth import AzureCloudConfig, az_connect
@@ -51,6 +53,7 @@ try:
         LogsQueryClient,
         LogsQueryPartialResult,
         LogsQueryResult,
+        LogsTable,
     )
     from azure.monitor.query import __version__ as az_monitor_version
 except ImportError as imp_err:
@@ -78,7 +81,17 @@ class AzureMonitorDriver(DriverBase):
 
     _DEFAULT_TIMEOUT = 300
 
-    def __init__(self, connection_str: Optional[str] = None, **kwargs):
+    def __init__(  # pylint:disable=too-many-arguments
+        self,
+        connection_str: Optional[str] = None,
+        *,
+        data_environment: Union[str, DataEnvironment] = DataEnvironment.MSSentinel,
+        debug: bool = False,
+        max_threads: int = 4,
+        timeout: Optional[int] = None,
+        server_timeout: Optional[int] = None,
+        proxies: Optional[Dict[str, str]] = None,
+    ) -> None:
         """
         Instantiate KqlDriver and optionally connect.
 
@@ -105,9 +118,9 @@ class AzureMonitorDriver(DriverBase):
             (can be overridden in connect method)
 
         """
-        if kwargs.get("debug", False):
+        if debug:
             logger.setLevel(logging.DEBUG)
-        super().__init__(**kwargs)
+        super().__init__(data_environment, max_threads=max_threads)
 
         self._schema: Dict[str, Any] = {}
         self.set_driver_property(
@@ -116,10 +129,8 @@ class AzureMonitorDriver(DriverBase):
         )
         self._loaded = True
         self._ua_policy = UserAgentPolicy(user_agent=mp_ua_header()["UserAgent"])
-        self._def_timeout = kwargs.get(
-            "timeout", kwargs.get("server_timeout", self._DEFAULT_TIMEOUT)
-        )
-        self._def_proxies = kwargs.get("proxies", get_http_proxies())
+        self._def_timeout: int = timeout or server_timeout or self._DEFAULT_TIMEOUT
+        self._def_proxies: Optional[Dict[str, str]] = proxies or get_http_proxies()
         self._query_client: Optional[LogsQueryClient] = None
         self._az_tenant_id: Optional[str] = None
         self._ws_config: Optional[WorkspaceConfig] = None
@@ -135,14 +146,14 @@ class AzureMonitorDriver(DriverBase):
             DriverProps.EFFECTIVE_ENV, DataEnvironment.MSSentinel.name
         )
         self.set_driver_property(DriverProps.SUPPORTS_THREADING, value=True)
-        self.set_driver_property(
-            DriverProps.MAX_PARALLEL, value=kwargs.get("max_threads", 4)
-        )
+        self.set_driver_property(DriverProps.MAX_PARALLEL, value=max_threads)
         self.az_cloud_config = AzureCloudConfig()
         logger.info(
-            "AzureMonitorDriver loaded. connect_str  %s, kwargs: %s",
+            "AzureMonitorDriver loaded. connect_str  %s, timeout: %s, proxies: %s, max_threads: %s",
             connection_str,
-            kwargs,
+            timeout,
+            proxies,
+            max_threads,
         )
 
     @property
@@ -155,9 +166,9 @@ class AzureMonitorDriver(DriverBase):
         return base_url
 
     @property
-    def current_connection(self) -> str:
+    def current_connection(self) -> Optional[str]:
         """Return the current connection name."""
-        connection = self._ws_name
+        connection: Optional[str] = self._ws_name
         if (
             not connection
             and self._ws_config
@@ -173,11 +184,24 @@ class AzureMonitorDriver(DriverBase):
         )
 
     @current_connection.setter
-    def current_connection(self, value: str):
+    def current_connection(self, value: str) -> None:
         """Allow attrib to be set but ignore."""
         del value
 
-    def connect(self, connection_str: Optional[str] = None, **kwargs):
+    def connect(  # pylint:disable=too-many-arguments
+        self,
+        connection_str: Optional[str] = None,
+        *,
+        auth_types: Optional[List[str]] = None,
+        mp_az_auth: Optional[Union[str, bool, List[str]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[Dict[str, str]] = None,
+        tenant_id: Optional[str] = None,
+        mp_az_tenant_id: Optional[str] = None,
+        workspace: Optional[str] = None,
+        workspaces: Optional[List[str]] = None,
+        workspace_ids: Optional[List[str]] = None,
+    ) -> None:
         """
         Connect to data source.
 
@@ -233,14 +257,23 @@ class AzureMonitorDriver(DriverBase):
 
         """
         self._connected = False
-        self._query_client = self._create_query_client(connection_str, **kwargs)
+        self._query_client = self._create_query_client(
+            connection_str,
+            auth_types=auth_types,
+            mp_az_auth=mp_az_auth,
+            timeout=timeout,
+            proxies=proxies,
+            tenant_id=tenant_id,
+            mp_az_tenant_id=mp_az_tenant_id,
+            workspace=workspace,
+            workspaces=workspaces,
+            workspace_ids=workspace_ids,
+        )
 
         # get the schema
         self._schema = self._get_schema()
         self._connected = True
         print("connected")
-
-        return self._connected
 
     # pylint: disable=too-many-branches
 
@@ -257,8 +290,13 @@ class AzureMonitorDriver(DriverBase):
         """
         return self._schema
 
-    def query(
-        self, query: str, query_source: Optional[QuerySource] = None, **kwargs
+    def query(  # pylint: disable = too-many-arguments
+        self,
+        query: str,
+        *,
+        time_span: Optional[Dict[str, datetime]] = None,
+        query_source: Optional[QuerySource] = None,
+        default_time_params: bool = False,
     ) -> Union[pd.DataFrame, Any]:
         """
         Execute query string and return DataFrame of results.
@@ -293,7 +331,11 @@ class AzureMonitorDriver(DriverBase):
             )
         if query_source:
             self._check_table_exists(query_source)
-        data, result = self.query_with_results(query, **kwargs)
+        data, result = self.query_with_results(
+            query,
+            time_span=time_span,
+            default_time_params=default_time_params,
+        )
         return data if data is not None else result
 
     # pylint: disable=too-many-branches
@@ -301,10 +343,10 @@ class AzureMonitorDriver(DriverBase):
         self,
         query: str,
         *,
-        time_span: Dict[str, datetime],
+        time_span: Optional[Dict[str, datetime]] = None,
         default_time_params: bool = False,
         fail_on_partial: bool = False,
-        timeout: Union[int, None] = None,
+        timeout: Optional[int] = None,
     ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """
         Execute query string and return DataFrame of results.
@@ -328,14 +370,20 @@ class AzureMonitorDriver(DriverBase):
                 title="Workspace not connected.",
                 help_uri=_HELP_URL,
             )
-        time_span_value = self._get_time_span_value(
+        time_span_value: Optional[
+            Tuple[datetime, datetime]
+        ] = self._get_time_span_value(
             default_time_params=default_time_params,
             time_span=time_span,
         )
-        server_timeout = timeout or self._def_timeout
+        server_timeout: int = timeout or self._def_timeout
 
-        workspace_id = next(iter(self._workspace_ids), None) or self._workspace_id
-        additional_workspaces = self._workspace_ids[1:] if self._workspace_ids else None
+        workspace_id: Optional[str] = (
+            next(iter(self._workspace_ids), None) or self._workspace_id
+        )
+        additional_workspaces: Optional[List[str]] = (
+            self._workspace_ids[1:] if self._workspace_ids else None
+        )
         logger.info("Query to run %s", query)
         logger.info(
             "Workspaces %s", ",".join(self._workspace_ids) or self._workspace_id
@@ -347,7 +395,9 @@ class AzureMonitorDriver(DriverBase):
         )
         logger.info("Timeout %s", server_timeout)
         try:
-            result = self._query_client.query_workspace(
+            result: Optional[
+                Union[LogsQueryResult, LogsQueryPartialResult]
+            ] = self._query_client.query_workspace(
                 workspace_id=workspace_id,  # type: ignore[arg-type]
                 query=query,
                 timespan=time_span_value,  # type: ignore[arg-type]
@@ -362,7 +412,7 @@ class AzureMonitorDriver(DriverBase):
             result = None
             self._raise_unknown_error(unknown_err)
         result = cast(LogsQueryResult, result)
-        status = self._get_query_status(result)
+        status: Dict[str, Any] = self._get_query_status(result)
         logger.info("query status %s", repr(status))
 
         if isinstance(result, LogsQueryPartialResult):
@@ -376,76 +426,109 @@ class AzureMonitorDriver(DriverBase):
                 "Partial results returned. This may indicate a query timeout.",
                 RuntimeWarning,
             )
-            table = result.partial_data[0]  # type: ignore[attr-defined]
+            table: LogsTable = result.partial_data[0]
         else:
-            table = result.tables[0]  # type: ignore[attr-defined]
+            table = result.tables[0]
         data_frame = pd.DataFrame(table.rows, columns=table.columns)
         logger.info("Dataframe returned with %d rows", len(data_frame))
         return data_frame, status
 
-    def _create_query_client(self, connection_str, **kwargs):
+    def _create_query_client(  # pylint: disable=too-many-arguments
+        self,
+        connection_str: Optional[str] = None,
+        *,
+        auth_types: Optional[List[str]] = None,
+        mp_az_auth: Optional[Union[str, bool, List[str]]] = None,
+        timeout: Optional[int] = None,
+        proxies: Optional[Dict[str, str]] = None,
+        tenant_id: Optional[str] = None,
+        mp_az_tenant_id: Optional[str] = None,
+        workspace: Optional[str] = None,
+        workspaces: Optional[List[str]] = None,
+        workspace_ids: Optional[List[str]] = None,
+        **kwargs,
+    ) -> LogsQueryClient:
         """Create the query client."""
-        az_auth_types = kwargs.pop("auth_types", kwargs.get("mp_az_auth"))
-        if isinstance(az_auth_types, bool):
-            az_auth_types = None
-        if isinstance(az_auth_types, str):
-            az_auth_types = [az_auth_types]
+        if auth_types:
+            az_auth_types: Optional[List[str]] = auth_types
+        else:
+            if isinstance(mp_az_auth, bool):
+                az_auth_types = None
+            elif isinstance(mp_az_auth, str):
+                az_auth_types = [mp_az_auth]
+            else:
+                az_auth_types = mp_az_auth
         self._connect_auth_types = az_auth_types
 
-        self._def_timeout = kwargs.pop("timeout", self._DEFAULT_TIMEOUT)
-        self._def_proxies = kwargs.pop("proxies", self._def_proxies)
-        self._get_workspaces(connection_str, **kwargs)
+        self._def_timeout = timeout or self._def_timeout
+        self._def_proxies = proxies or self._def_proxies
+        self._get_workspaces(
+            connection_str,
+            tenant_id=tenant_id,
+            mp_az_tenant_id=mp_az_tenant_id,
+            workspace=workspace,
+            workspaces=workspaces,
+            workspace_ids=workspace_ids,
+        )
 
         # check for additional Args in settings but allow kwargs to override
-        connect_args = self._get_workspace_settings_args()
+        connect_args: Dict[str, Any] = self._get_workspace_settings_args()
         connect_args.update(kwargs)
-        connect_args.update(
-            {"auth_methods": az_auth_types, "tenant_id": self._az_tenant_id}
+
+        credentials: AzCredentials = az_connect(
+            auth_methods=az_auth_types,
+            tenant_id=self._az_tenant_id,
+            **connect_args,
         )
-        credentials = az_connect(**connect_args)
         logger.info(
             "Created query client. Auth type: %s, Url: %s, Proxies: %s",
             type(credentials.modern) if credentials else "None",
             self.url_endpoint,
-            kwargs.get("proxies", self._def_proxies),
+            proxies or self._def_proxies,
         )
         return LogsQueryClient(
             credential=credentials.modern,
             endpoint=self.url_endpoint,
-            proxies=kwargs.get("proxies", self._def_proxies),
+            proxies=proxies or self._def_proxies,
         )
 
     def _get_workspace_settings_args(self) -> Dict[str, Any]:
         """Return any Args settings for the current workspace."""
         if not self._ws_config or not self._ws_config.settings_path:
             return {}
-        args_path = f"{self._ws_config.settings_path}.Args"
-        args_settings = self._ws_config.settings.get("Args", {})
+        args_path: str = f"{self._ws_config.settings_path}.Args"
+        args_settings: Dict[str, Any] = self._ws_config.settings.get("Args", {})
         return {
             name: get_protected_setting(args_path, name)
             for name in args_settings.keys()
         }
 
-    def _get_workspaces(self, connection_str: Optional[str] = None, **kwargs):
+    def _get_workspaces(
+        self,
+        connection_str: Optional[str] = None,
+        *,
+        tenant_id: Optional[str] = None,
+        mp_az_tenant_id: Optional[str] = None,
+        workspace: Optional[str] = None,
+        workspaces: Optional[List[str]] = None,
+        workspace_ids: Optional[List[str]] = None,
+    ) -> None:
         """Get workspace or workspaces to connect to."""
-        self._az_tenant_id = kwargs.get("tenant_id", kwargs.get("mp_az_tenant_id"))
+        self._az_tenant_id = tenant_id or mp_az_tenant_id
         # multiple workspace IDs
-        if workspaces := kwargs.pop("workspaces", None):
+        if workspaces:
             self._get_workspaces_by_name(workspaces)
             return
-        if workspace_ids := kwargs.pop("workspace_ids", None):
+        if workspace_ids:
             self._get_workspaces_by_id(workspace_ids)
             return
 
         # standard - single-workspace configuration
-        workspace_name = kwargs.get("workspace")
         ws_config: Optional[WorkspaceConfig] = None
         connection_str = connection_str or self._def_connection_str
-        if workspace_name or connection_str is None:
-            ws_config = WorkspaceConfig(workspace=workspace_name)  # type: ignore
-            logger.info(
-                "WorkspaceConfig created from workspace name %s", workspace_name
-            )
+        if workspace or connection_str is None:
+            ws_config = WorkspaceConfig(workspace=workspace)  # type: ignore
+            logger.info("WorkspaceConfig created from workspace name %s", workspace)
         elif isinstance(connection_str, str):
             self._def_connection_str = connection_str
             with contextlib.suppress(ValueError):
@@ -475,12 +558,12 @@ class AzureMonitorDriver(DriverBase):
                 help_uri=_HELP_URL,
             )
         self._ws_config = ws_config
-        self._ws_name = workspace_name or ws_config.workspace_id
+        self._ws_name = workspace or ws_config.workspace_id
         if not self._az_tenant_id and WorkspaceConfig.CONF_TENANT_ID in ws_config:
             self._az_tenant_id = ws_config[WorkspaceConfig.CONF_TENANT_ID]
         self._workspace_id = ws_config[WorkspaceConfig.CONF_WS_ID]
 
-    def _get_workspaces_by_id(self, workspace_ids):
+    def _get_workspaces_by_id(self, workspace_ids) -> None:
         if not self._az_tenant_id:
             raise MsticpyKqlConnectionError(
                 "You must supply a tenant_id with the workspace_ids parameter",
@@ -494,8 +577,8 @@ class AzureMonitorDriver(DriverBase):
             ", ".join(self._workspace_ids),
         )
 
-    def _get_workspaces_by_name(self, workspaces):
-        workspace_configs = {
+    def _get_workspaces_by_name(self, workspaces) -> None:
+        workspace_configs: Dict[Any, Any] = {
             WorkspaceConfig(workspace)[WorkspaceConfig.CONF_WS_ID]: WorkspaceConfig(
                 workspace
             )[WorkspaceConfig.CONF_TENANT_ID]
@@ -514,12 +597,15 @@ class AzureMonitorDriver(DriverBase):
     def _get_time_span_value(
         self,
         *,
-        time_span: Dict[str, datetime],
+        time_span: Optional[Dict[str, datetime]],
         default_time_params: bool = False,
     ) -> Union[Tuple[datetime, datetime], None]:
         """Return the timespan for the query API call."""
-        start = time_span.get("start")
-        end = time_span.get("end")
+        start: Optional[datetime] = None
+        end: Optional[datetime] = None
+        if time_span:
+            start = time_span.get("start")
+            end = time_span.get("end")
         if default_time_params or start is None or end is None:
             logger.info("No time parameters supplied.")
             return None
@@ -529,12 +615,12 @@ class AzureMonitorDriver(DriverBase):
         )
         # Azure Monitor API expects datetime objects, so
         # convert to datetimes if we have pd.Timestamps
-        t_start = (
+        t_start: datetime = (
             t_span.start.to_pydatetime(warn=False)
             if isinstance(t_span.start, pd.Timestamp)
             else t_span.start
         )
-        t_end = (
+        t_end: datetime = (
             t_span.end.to_pydatetime(warn=False)
             if isinstance(t_span.end, pd.Timestamp)
             else t_span.end
@@ -542,12 +628,12 @@ class AzureMonitorDriver(DriverBase):
         logger.info("Time parameters set %s", str(t_span))
         return t_start, t_end
 
-    def _check_table_exists(self, query_source):
+    def _check_table_exists(self, query_source) -> None:
         """Check that query table is in the workspace schema."""
         if not self.schema:
             return
         try:
-            table = query_source.params.get("table", {}).get("default")
+            table: Optional[str] = query_source.params.get("table", {}).get("default")
         except KeyError:
             table = None
         if table:
@@ -580,7 +666,7 @@ class AzureMonitorDriver(DriverBase):
         if not self._ws_config:
             logger.info("No workspace config - cannot get schema")
             return {}
-        mgmt_endpoint = self.az_cloud_config.resource_manager
+        mgmt_endpoint: str = self.az_cloud_config.resource_manager
 
         url_tables = (
             "{endpoint}subscriptions/{sub_id}/resourcegroups/"
@@ -588,7 +674,7 @@ class AzureMonitorDriver(DriverBase):
             "{ws_name}/tables?api-version=2021-12-01-preview"
         )
         try:
-            ws_name = self._ws_config.workspace_name
+            ws_name: str = self._ws_config.workspace_name
         except AttributeError:
             ws_name = self._ws_config.workspace_key
 
@@ -606,22 +692,28 @@ class AzureMonitorDriver(DriverBase):
             logger.info("Not all workspace config available - cannot get schema")
             return {}
 
-        credentials = az_connect(
+        credentials: AzCredentials = az_connect(
             auth_methods=self._connect_auth_types, tenant_id=self._az_tenant_id
         )
         token = credentials.modern.get_token(f"{mgmt_endpoint}/.default")
-        headers = {"Authorization": f"Bearer {token.token}", **mp_ua_header()}
+        headers: Dict[str, str] = {
+            "Authorization": f"Bearer {token.token}",
+            **mp_ua_header(),
+        }
         logger.info("Schema request to %s", fmt_url)
-        response = httpx.get(
+        response: httpx.Response = httpx.get(
             fmt_url,
             headers=headers,
             timeout=get_http_timeout(),
-            proxies=self._def_proxies or {},
+            proxies={
+                protocol: httpx.Proxy(proxy)
+                for protocol, proxy in (self._def_proxies or {}).items()
+            },
         )
         if response.status_code != 200:
             logger.info("Schema request failed. Status code: %d", response.status_code)
             return {}
-        tables = response.json()
+        tables: Dict[str, Any] = response.json()
         logger.info(
             "Schema retrieved from workspace. %d tables found.",
             len(tables.get("value", 0)),
@@ -634,7 +726,7 @@ class AzureMonitorDriver(DriverBase):
         return date_time.isoformat(sep="T") + "Z"
 
     @staticmethod
-    def _format_list(param_list: Iterable[Any]):
+    def _format_list(param_list: Iterable[Any]) -> str:
         """Return formatted list parameter."""
         fmt_list = []
         for item in param_list:
@@ -645,9 +737,9 @@ class AzureMonitorDriver(DriverBase):
         return ", ".join(fmt_list)
 
     @staticmethod
-    def _raise_query_failure(query, http_err):
+    def _raise_query_failure(query, http_err) -> NoReturn:
         """Raise query failure exception."""
-        err_contents = []
+        err_contents: List[str] = []
         if hasattr(http_err, "message"):
             err_contents = http_err.message.split("\n")
         if not err_contents:
@@ -659,7 +751,7 @@ class AzureMonitorDriver(DriverBase):
         ) from http_err
 
     @staticmethod
-    def _raise_unknown_error(exception):
+    def _raise_unknown_error(exception) -> NoReturn:
         """Raise an unknown exception."""
         raise MsticpyDataQueryError(
             "An unknown exception was returned by the service",
@@ -674,7 +766,7 @@ def _schema_format_tables(
     ws_tables: Dict[str, Iterable[Dict[str, Any]]]
 ) -> Dict[str, Dict[str, str]]:
     """Return a sorted dictionary of table names and column names/types."""
-    table_schema = {
+    table_schema: Dict[str, Dict[str, str]] = {
         table["name"]: _schema_format_columns(table["properties"]["schema"])
         for table in ws_tables["value"]
     }
@@ -683,7 +775,7 @@ def _schema_format_tables(
 
 def _schema_format_columns(table_schema: Dict[str, Any]) -> Dict[str, str]:
     """Return a sorted dictionary of column names and types."""
-    columns = {
+    columns: Dict[str, str] = {
         col["name"]: col["type"] for col in table_schema.get("standardColumns", {})
     }
     for col in table_schema.get("customColumns", []):

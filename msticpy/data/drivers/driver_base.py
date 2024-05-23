@@ -7,9 +7,9 @@
 import abc
 from abc import ABC
 from collections import defaultdict
-from datetime import datetime
 from typing import Any, Dict, Iterable, Optional, Set, Tuple, Union
 
+from httpx import Timeout
 import pandas as pd
 
 from ..._version import VERSION
@@ -75,22 +75,23 @@ class DriverProps:
 class DriverBase(ABC):
     """Base class for data providers."""
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        data_environment: Optional[Union[str, DataEnvironment]] = None,
+        *,
+        max_threads: int = 4,
+    ) -> None:
         """Initialize new instance."""
-        self._kwargs = kwargs
-        self._loaded = False
-        self._connected = False
-        self.current_connection = None
-        # self.public_attribs: Dict[str, Any] = {}
-        # self.formatters: Dict[str, Callable] = {}
-        # self.use_query_paths = True
-        # self.has_driver_queries = False
+        self._loaded: bool = False
+        self._connected: bool = False
+        self.current_connection: Optional[str] = None
         self._previous_connection = False
-        self.data_environment = kwargs.get("data_environment")
+        self.data_environment: DataEnvironment = DataEnvironment.parse(data_environment)
+
         self._query_filter: Dict[str, Set[str]] = defaultdict(set)
         self._instance: Optional[str] = None
 
-        self.properties = DriverProps.defaults()
+        self.properties: Dict[str, Any] = DriverProps.defaults()
         self.set_driver_property(
             name=DriverProps.EFFECTIVE_ENV,
             value=(
@@ -100,7 +101,7 @@ class DriverBase(ABC):
             ),
         )
         self.set_driver_property(DriverProps.SUPPORTS_THREADING, False)
-        self.set_driver_property(DriverProps.MAX_PARALLEL, kwargs.get("max_threads", 4))
+        self.set_driver_property(DriverProps.MAX_PARALLEL, max_threads)
 
     def __getattr__(self, attrib):
         """Return item from the properties dictionary as an attribute."""
@@ -173,7 +174,7 @@ class DriverBase(ABC):
         return {}
 
     @abc.abstractmethod
-    def connect(self, connection_str: Optional[str] = None, **kwargs):
+    def connect(self, connection_str: Optional[str] = None) -> None:
         """
         Connect to data source.
 
@@ -185,8 +186,9 @@ class DriverBase(ABC):
         """
 
     @abc.abstractmethod
-    def query(
-        self, query: str, query_source: Optional[QuerySource] = None, **kwargs
+    def query(  # pylint: disable = too-many-arguments
+        self,
+        query: str,
     ) -> pd.DataFrame:
         """
         Execute query string and return DataFrame of results.
@@ -216,11 +218,6 @@ class DriverBase(ABC):
     def query_with_results(
         self,
         query: str,
-        *,
-        time_span: Dict[str, datetime],
-        default_time_params: bool = False,
-        fail_on_partial: bool = False,
-        timeout: Union[int, None] = None,
     ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """
         Execute query string and return DataFrame plus native results.
@@ -270,7 +267,7 @@ class DriverBase(ABC):
         """Parameters that determine whether a query is relevant for the driver."""
         return self._query_filter
 
-    def add_query_filter(self, name: str, query_filter: Union[str, Iterable]):
+    def add_query_filter(self, name: str, query_filter: Union[str, Iterable]) -> None:
         """Add an expression to the query attach filter."""
         allowed_names = {"data_environments", "data_families", "data_sources"}
         if name not in allowed_names:
@@ -283,7 +280,7 @@ class DriverBase(ABC):
         else:
             self._query_filter[name].update(query_filter)
 
-    def set_driver_property(self, name: str, value: Any):
+    def set_driver_property(self, name: str, value: Any) -> None:
         """Set an item in driver properties."""
         if not DriverProps.valid_type(name, value):
             raise TypeError(
@@ -296,9 +293,8 @@ class DriverBase(ABC):
         """Return value or KeyError from driver properties."""
         return self.properties[name]
 
-    def query_usable(self, query_source: QuerySource) -> bool:
+    def query_usable(self, _: QuerySource) -> bool:
         """Return True if query should be exposed for this driver."""
-        del query_source
         return True
 
     # Read values from configuration
@@ -318,6 +314,13 @@ class DriverBase(ABC):
         )
 
     @staticmethod
-    def get_http_timeout(**kwargs):
+    def get_http_timeout(
+        *,
+        timeout: Optional[int] = None,
+        def_timeout: Optional[int] = None,
+    ) -> Timeout:
         """Get http timeout from settings or kwargs."""
-        return get_http_timeout(**kwargs)
+        return get_http_timeout(
+            timeout=timeout,
+            def_timeout=def_timeout,
+        )

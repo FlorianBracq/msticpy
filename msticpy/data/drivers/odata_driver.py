@@ -6,19 +6,21 @@
 """OData Driver class."""
 import abc
 import re
-import urllib
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+import urllib.parse
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import httpx
 import pandas as pd
+
+from msticpy.data.core.query_defns import DataEnvironment
 
 from ..._version import VERSION
 from ...auth.msal_auth import MSALDelegatedAuth
 from ...common.exceptions import MsticpyConnectionError, MsticpyUserConfigError
 from ...common.pkg_config import get_config
-from ...common.provider_settings import get_provider_settings
+from ...common.provider_settings import ProviderSettings, get_provider_settings
 from ...common.utility import mp_ua_header
-from .driver_base import DriverBase, DriverProps, QuerySource
+from .driver_base import DriverBase, DriverProps
 
 __version__ = VERSION
 __author__ = "Pete Bryan"
@@ -34,10 +36,16 @@ _HELP_URI = (
 class OData(DriverBase):
     """Parent class to retrieve date from an oauth based API."""
 
-    CONFIG_NAME = ""
+    CONFIG_NAME: str = ""
     _ALT_CONFIG_NAMES: Iterable[str] = []
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        data_environment: Optional[Union[str, DataEnvironment]] = None,
+        *,
+        max_threads: int = 4,
+        debug: bool = False,
+    ) -> None:
         """
         Instantiate OData driver and optionally connect.
 
@@ -47,13 +55,13 @@ class OData(DriverBase):
             Set true if you want to connect to the provider at initialization
 
         """
-        super().__init__(**kwargs)
+        super().__init__(data_environment=data_environment, max_threads=max_threads)
         self.oauth_url: Optional[str] = None
         self.req_body: Optional[Dict[str, Optional[str]]] = None
         self.api_ver: Optional[str] = None
         self.api_root: Optional[str] = None
         self.request_uri: Optional[str] = None
-        self.req_headers = {
+        self.req_headers: Dict[str, Any] = {
             "Content-Type": "application/json",
             "Accept": "application/json",
             "Authorization": None,
@@ -61,20 +69,19 @@ class OData(DriverBase):
         }
         self._loaded = True
         self.aad_token = None
-        self._debug = kwargs.get("debug", False)
+        self._debug: bool = debug
         self.token_type = "AAD"  # nosec
-        self.scopes = None
-        self.msal_auth = None
+        self.scopes: Optional[List[str]] = None
+        self.msal_auth: Optional[MSALDelegatedAuth] = None
 
         self.set_driver_property(DriverProps.SUPPORTS_THREADING, value=True)
-        self.set_driver_property(
-            DriverProps.MAX_PARALLEL, value=kwargs.get("max_threads", 4)
-        )
+        self.set_driver_property(DriverProps.MAX_PARALLEL, value=max_threads)
 
     @abc.abstractmethod
     def query(
-        self, query: str, query_source: QuerySource = None, **kwargs
-    ) -> Union[pd.DataFrame, Any]:
+        self,
+        query: str,
+    ) -> pd.DataFrame:
         """
         Execute query string and return DataFrame of results.
 
@@ -96,8 +103,12 @@ class OData(DriverBase):
     def connect(
         self,
         connection_str: Optional[str] = None,
-        **kwargs,
-    ):
+        *,
+        delegated_auth: bool = False,
+        instance: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        username: Optional[str] = None,
+    ) -> None:
         """
         Connect to oauth data source.
 
@@ -120,23 +131,19 @@ class OData(DriverBase):
         apiVersion
 
         """
-        delegated_auth = kwargs.get("delegated_auth", False)
         cs_dict: Dict[str, Any] = {}
         if connection_str:
             self.current_connection = connection_str
             cs_dict = self._parse_connection_str(connection_str)
         else:
-            instance = kwargs.pop("instance", None)
             cs_dict = _get_driver_settings(
                 self.CONFIG_NAME, self._ALT_CONFIG_NAMES, instance
             )
-            # let user override config settings with function kwargs
-            cs_dict.update(kwargs)
 
-        missing_settings = [
+        missing_settings: List[str] = [
             setting for setting in ("tenant_id", "client_id") if setting not in cs_dict
         ]
-        auth_present = "username" in cs_dict or "client_secret" in cs_dict
+        auth_present: bool = bool(username or client_secret)
         if missing_settings:
             raise MsticpyUserConfigError(
                 "You must supply the following required connection parameter(s)",
@@ -155,9 +162,13 @@ class OData(DriverBase):
 
         # Default to using application based authentication
         if not delegated_auth:
-            json_response = self._get_token_standard_auth(kwargs, cs_dict)
+            json_response: Dict[str, Any] = self._get_token_standard_auth(
+                **cs_dict,
+            )
         else:
-            json_response = self._get_token_delegate_auth(kwargs, cs_dict)
+            json_response = self._get_token_delegate_auth(
+                **cs_dict,
+            )
 
         self.req_headers["Authorization"] = f"Bearer {self.aad_token}"
         self.api_root = cs_dict.get("apiRoot", self.api_root)
@@ -165,33 +176,45 @@ class OData(DriverBase):
             raise ValueError(
                 f"Sub class {self.__class__.__name__}", "did not set self.api_root"
             )
-        api_ver = cs_dict.get("apiVersion", self.api_ver)
+        api_ver: Optional[str] = cs_dict.get("apiVersion", self.api_ver)
         self.request_uri = self.api_root + str(api_ver)
 
         print("Connected.")
         self._connected = True
 
         json_response["access_token"] = None
-        return json_response
 
-    def _get_token_standard_auth(self, kwargs, cs_dict) -> Dict[str, Any]:
-        _check_config(cs_dict, "client_secret", "application authentication")
+    def _get_token_standard_auth(
+        self,
+        *,
+        tenant_id: str,
+        client_id: str,
+        client_secret: Optional[str] = None,
+        timeout: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        _check_config(client_secret, "application authentication")
         # self.oauth_url and self.req_body are correctly set in concrete
         # instances __init__
-        req_url = self.oauth_url.format(tenantId=cs_dict["tenant_id"])  # type: ignore
-        req_body = dict(self.req_body)  # type: ignore
-        req_body["client_id"] = cs_dict["client_id"]
-        req_body["client_secret"] = cs_dict["client_secret"]
+        if not self.oauth_url:
+            error_msg: str = "OAuth URL cannot be none"
+            raise ValueError(error_msg)
+        if not self.req_body:
+            error_msg = "req_body cannot be none"
+            raise ValueError(error_msg)
+        req_url: str = self.oauth_url.format(tenantId=tenant_id)
+        req_body = dict(self.req_body)
+        req_body["client_id"] = client_id
+        req_body["client_secret"] = client_secret
 
         # Authenticate and obtain AAD Token for future calls
-        data = urllib.parse.urlencode(req_body).encode("utf-8")
-        response = httpx.post(
+        data: bytes = urllib.parse.urlencode(req_body).encode("utf-8")
+        response: httpx.Response = httpx.post(
             url=req_url,
             content=data,
-            timeout=self.get_http_timeout(**kwargs),
+            timeout=self.get_http_timeout(timeout=timeout),
             headers=mp_ua_header(),
         )
-        json_response = response.json()
+        json_response: Dict[str, Any] = response.json()
         self.aad_token = json_response.get("access_token", None)
         if not self.aad_token:
             raise MsticpyConnectionError(
@@ -199,21 +222,38 @@ class OData(DriverBase):
             )
         return json_response
 
-    def _get_token_delegate_auth(self, kwargs, cs_dict) -> Dict[str, Any]:
-        _check_config(cs_dict, "username", "delegated authentication")
-        authority = self.oauth_url.format(tenantId=cs_dict["tenant_id"])  # type: ignore
+    def _get_token_delegate_auth(
+        self,
+        *,
+        client_id: str,
+        tenant_id: str,
+        location: str = "token_cache.bin",
+        auth_type: str = "device",
+        username: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        _check_config(username, "delegated authentication")
+        if not self.oauth_url:
+            error_msg: str = "OAuth URL cannot be none"
+            raise ValueError(error_msg)
+        if not username:
+            error_msg = "username cannot be none"
+            raise ValueError(error_msg)
+        if not self.scopes:
+            error_msg = "scopes cannot be none"
+            raise ValueError(error_msg)
+        authority: str = self.oauth_url.format(tenantId=tenant_id)
         if authority.startswith("https://login"):
-            auth_url = urllib.parse.urlparse(authority)
+            auth_url: urllib.parse.ParseResult = urllib.parse.urlparse(authority)
             authority = f"{auth_url.scheme}://{auth_url.netloc}/{{tenantId}}".format(
-                tenantId=cs_dict["tenant_id"]
+                tenantId=tenant_id
             )
         self.msal_auth = MSALDelegatedAuth(
-            client_id=cs_dict["client_id"],
+            client_id=client_id,
             authority=authority,
-            username=cs_dict["username"],
+            username=username,
             scopes=self.scopes,
-            auth_type=kwargs.get("auth_type", "device"),
-            location=cs_dict.get("location", "token_cache.bin"),
+            auth_type=auth_type,
+            location=location,
             connect=True,
         )
         self.aad_token = self.msal_auth.token
@@ -221,7 +261,14 @@ class OData(DriverBase):
         return {}
 
     # pylint: disable=too-many-branches
-    def query_with_results(self, query: str, **kwargs) -> Tuple[pd.DataFrame, Any]:
+    def query_with_results(
+        self,
+        query: str,
+        *,
+        api_end: Optional[str] = None,
+        body: bool = True,
+        timeout: Optional[int] = None,
+    ) -> Tuple[pd.DataFrame, Dict[str, Any]]:
         """
         Execute query string and return DataFrame of results.
 
@@ -249,14 +296,14 @@ class OData(DriverBase):
 
         # Build request based on whether endpoint requires data to be passed in
         # request body in or URL
-        if kwargs["body"] is True:
-            req_url = f"{self.request_uri}{kwargs['api_end']}"
+        if body:
+            req_url: str = f"{self.request_uri}{api_end}"
             req_url = urllib.parse.quote(req_url, safe="%/:=&?~#+!$,;'@()*[]")
-            response = httpx.post(
+            response: httpx.Response = httpx.post(
                 url=req_url,
                 headers=self.req_headers,
                 json={"Query": query},
-                timeout=self.get_http_timeout(**kwargs),
+                timeout=self.get_http_timeout(timeout=timeout),
             )
         else:
             # self.request_uri set if self.connected
@@ -264,31 +311,31 @@ class OData(DriverBase):
             response = httpx.get(
                 url=req_url,
                 headers=self.req_headers,
-                timeout=self.get_http_timeout(**kwargs),
+                timeout=self.get_http_timeout(timeout=timeout),
             )
 
         self._check_response_errors(response)
 
-        json_response = response.json()
+        json_response: Dict[str, Any] = response.json()
         if isinstance(json_response, int):
             print(
                 "Warning - query did not complete successfully.",
                 "Check returned response.",
             )
-            return None, json_response  # type: ignore
+            return pd.DataFrame(), json_response
 
-        results_key = "Results" if "Results" in json_response else "results"
-        result = json_response.get(results_key, json_response)
+        results_key: str = "Results" if "Results" in json_response else "results"
+        result: List[Dict] = json_response.get(results_key, json_response)
 
         if not result:
             print("Warning - query did not return any results.")
-            return None, json_response  # type: ignore
+            return pd.DataFrame(), json_response
         return pd.json_normalize(result), json_response
 
     # pylint: enable=too-many-branches
 
     @staticmethod
-    def _check_response_errors(response):
+    def _check_response_errors(response) -> None:
         """Check the response for possible errors."""
         if response.status_code == httpx.codes.OK:
             return
@@ -318,7 +365,7 @@ class OData(DriverBase):
             dict of key/pair values
 
         """
-        cs_items = connection_str.split(";")
+        cs_items: List[str] = connection_str.split(";")
         return {
             prop[0]: prop[1]
             for prop in [item.strip().split("=") for item in cs_items]
@@ -336,16 +383,16 @@ class OData(DriverBase):
             OData filter string
 
         """
-        get_params = {}
+        get_params: Dict[str, Any] = {}
         for filter_param in re.split(r"[\?\&]+", filterstr):
             if filter_param:
-                attr = filter_param.split("=")[0]
-                val = filter_param.split("=")[1]
+                attr: str = filter_param.split("=")[0]
+                val: str = filter_param.split("=")[1]
                 get_params[attr] = val
         return get_params
 
 
-_CONFIG_NAME_MAP = {
+_CONFIG_NAME_MAP: Dict[str, Tuple[str, str]] = {
     "tenant_id": ("tenantid", "tenant_id"),
     "client_id": ("clientid", "client_id"),
     "client_secret": ("clientsecret", "client_secret"),
@@ -353,9 +400,9 @@ _CONFIG_NAME_MAP = {
 }
 
 
-def _map_config_dict_name(config_dict: Dict[str, str]):
+def _map_config_dict_name(config_dict: Dict[str, str]) -> Dict[str, str]:
     """Map configuration parameter names to expected values."""
-    mapped_dict = config_dict.copy()
+    mapped_dict: Dict[str, str] = config_dict.copy()
     for provided_name in config_dict:
         for req_name, alternates in _CONFIG_NAME_MAP.items():
             if provided_name.casefold() in alternates:
@@ -368,8 +415,10 @@ def _get_driver_settings(
     config_name: str, alt_names: Iterable[str], instance: Optional[str] = None
 ) -> Dict[str, str]:
     """Try to retrieve config settings for OAuth drivers."""
-    config_key = f"{config_name}-{instance}" if instance else config_name
-    drv_config = get_provider_settings("DataProviders").get(config_key)
+    config_key: str = f"{config_name}-{instance}" if instance else config_name
+    drv_config: Optional[ProviderSettings] = get_provider_settings("DataProviders").get(
+        config_key
+    )
 
     app_config: Dict[str, str] = {}
     if drv_config:
@@ -377,7 +426,7 @@ def _get_driver_settings(
     else:
         # Otherwise fall back on legacy settings location
         for alt_name in alt_names:
-            alt_key = f"{alt_name}-{instance}" if instance else alt_name
+            alt_key: str = f"{alt_name}-{instance}" if instance else alt_name
             app_config = get_config(f"{alt_key}.Args", {})
             if app_config:
                 break
@@ -388,9 +437,9 @@ def _get_driver_settings(
     return _map_config_dict_name(app_config)
 
 
-def _check_config(cs_config: dict, item_name: str, scope: str):
+def _check_config(item_name: Optional[str], scope: str) -> None:
     """Check if an iteam is present in a config."""
-    if item_name not in cs_config:
+    if not item_name:
         raise MsticpyUserConfigError(
             f"To use {scope}, you must define {item_name}",
             "or add them to your msticpyconfig.yaml.",

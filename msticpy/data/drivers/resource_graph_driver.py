@@ -5,13 +5,16 @@
 # --------------------------------------------------------------------------
 """Azure Resource Graph Driver class."""
 import warnings
-from typing import Any, Tuple, Union
+from typing import Any, List, Optional, Tuple, Union
 
 import pandas as pd
 
 # pylint: disable=wrong-import-order, ungrouped-imports
 from azure.mgmt.subscription import SubscriptionClient
 from pandas.core.frame import DataFrame
+
+from msticpy.auth.azure_auth_core import AzCredentials
+from msticpy.data.core.query_defns import DataEnvironment
 
 from ..._version import VERSION
 from ...auth.azure_auth import AzureCloudConfig, az_connect, only_interactive_cred
@@ -44,17 +47,32 @@ __author__ = "Ryan Cobb"
 class ResourceGraphDriver(DriverBase):
     """Driver to connect and query from Azure Resource Graph."""
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        data_environment: Union[str, DataEnvironment] = DataEnvironment.ResourceGraph,
+        *,
+        max_threads: int = 4,
+        debug: bool = False,
+        cloud: Optional[str] = None,
+    ) -> None:
         """Instantiate Azure Resource Graph Driver."""
-        super().__init__()
-        self.client = None
-        self.sub_client = None
-        self.subscription_ids = None
+        super().__init__(
+            data_environment=data_environment,
+            max_threads=max_threads,
+        )
+        self.client: ResourceGraphClient
+        self.sub_client: Optional[SubscriptionClient] = None
+        self.subscription_ids: Optional[List[Optional[str]]] = None
         self._connected = False
-        self._debug = kwargs.get("debug", False)
-        self.az_cloud_config = AzureCloudConfig(cloud=kwargs.get("cloud"))
+        self._debug: bool = debug
+        self.az_cloud_config = AzureCloudConfig(cloud=cloud)
 
-    def connect(self, connection_str: str = None, **kwargs):
+    def connect(
+        self,
+        _: Optional[str] = None,
+        auth_methods: Optional[List[str]] = None,
+        silent: bool = True,
+    ) -> None:
         """
         Connect to Azure Resource Graph via Azure SDK.
 
@@ -74,11 +92,11 @@ class ResourceGraphDriver(DriverBase):
         section of msticpyconfig.yaml, if available.
 
         """
-        auth_methods = kwargs.get("auth_methods")
         auth_methods = auth_methods or self.az_cloud_config.auth_methods
-        silent = kwargs.get("silent", True)
 
-        credentials = az_connect(auth_methods=auth_methods, silent=silent)
+        credentials: AzCredentials = az_connect(
+            auth_methods=auth_methods, silent=silent
+        )
         if only_interactive_cred(credentials.modern):
             print("Check your default browser for interactive sign-in prompt.")
         self.client = ResourceGraphClient(
@@ -92,7 +110,9 @@ class ResourceGraphDriver(DriverBase):
             credential_scopes=[self.az_cloud_config.token_uri],
         )
         self.subscription_ids = [
-            sub.subscription_id for sub in self.sub_client.subscriptions.list()
+            sub.subscription_id
+            for sub in self.sub_client.subscriptions.list()
+            if sub.subscription_id
         ]
 
         self._connected = True
@@ -101,7 +121,10 @@ class ResourceGraphDriver(DriverBase):
         print("Connected")
 
     def query(
-        self, query: str, query_source: QuerySource = None, **kwargs
+        self,
+        query: str,
+        query_source: Optional[QuerySource] = None,
+        top: int = 1000,
     ) -> Union[pd.DataFrame, Any]:
         """
         Execute Resource Graph query and retrieve results.
@@ -126,13 +149,21 @@ class ResourceGraphDriver(DriverBase):
 
         """
         del query_source
-        result_df, result = self.query_with_results(query, **kwargs)
+        result_df, result = self.query_with_results(
+            query,
+            top=top,
+        )
         if isinstance(result_df, DataFrame) and not result_df.empty:
             return result_df
 
         return result
 
-    def query_with_results(self, query: str, **kwargs) -> Tuple[pd.DataFrame, Any]:
+    def query_with_results(
+        self,
+        query: str,
+        *,
+        top: int = 1000,
+    ) -> Tuple[pd.DataFrame, Any]:
         """
         Execute query string and return DataFrame of results.
 
@@ -157,8 +188,6 @@ class ResourceGraphDriver(DriverBase):
 
         result_truncated = False
 
-        top = kwargs.get("top", 1000)
-
         request_options = QueryRequestOptions(
             top=top,
             result_format=ResultFormat.object_array,
@@ -177,6 +206,12 @@ class ResourceGraphDriver(DriverBase):
 
         if response.result_truncated == ResultTruncated.true:
             result_truncated = True
+
+        if not isinstance(response.data, (list, dict)):
+            error_msg: str = (
+                f"Expected data to be sized, but found {type(response.data)}"
+            )
+            raise ValueError(error_msg)
 
         if result_truncated and top is not None and len(response.data) < top:
             warnings.warn(

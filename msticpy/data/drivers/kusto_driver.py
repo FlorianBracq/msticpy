@@ -29,7 +29,13 @@ KustoClusterSettings = Dict[str, Dict[str, Union[str, ProviderArgs]]]
 class KustoDriver(KqlDriver):
     """Kusto Driver class to execute kql queries for Azure Data Explorer."""
 
-    def __init__(self, connection_str: str = None, **kwargs):
+    def __init__(
+        self,
+        connection_str: Optional[str] = None,
+        *,
+        data_environment: DataEnvironment = DataEnvironment.Kusto,
+        **kwargs: Any,
+    ) -> None:
         """
         Instantiate KustoDriver.
 
@@ -45,7 +51,7 @@ class KustoDriver(KqlDriver):
 
         """
         super().__init__(connection_str=connection_str, **kwargs)
-        self.environment = kwargs.get("data_environment", DataEnvironment.Kusto)
+        self.environment = data_environment
         self.set_driver_property(DriverProps.EFFECTIVE_ENV, DataEnvironment.Kusto.name)
         self._connected = True
         self._kusto_settings: KustoClusterSettings = _get_kusto_settings()
@@ -111,7 +117,7 @@ class KustoDriver(KqlDriver):
     def query(
         self,
         query: str,
-        query_source: QuerySource = None,
+        query_source: Optional[QuerySource] = None,
         *,
         cluster: Union[str, None] = None,
         database: Union[str, None] = None,
@@ -159,32 +165,33 @@ class KustoDriver(KqlDriver):
 
     def _get_connection_string(
         self,
-        query_source: Union[QuerySource, None] = None,
+        query_source: Optional[QuerySource] = None,
         *,
-        connection_str: Union[str, None] = None,
-        database: Union[str, None] = None,
-        cluster: Union[str, None] = None,
-    ):
+        connection_str: Optional[str] = None,
+        database: Optional[str] = None,
+        cluster: Optional[Union[str, ProviderArgs]] = None,
+    ) -> Optional[str]:
         """Create a connection string from arguments and configuration."""
         # If the connection string is supplied as a parameter, use that
-        if not connection_str:
-            # try to get cluster and db from kwargs or query_source metadata
-            cluster = self._lookup_cluster(cluster=cluster or "Kusto")
-            if cluster and database:
-                connection_str = self._create_connection(
-                    cluster=cluster, database=database
-                )
-                self._cluster_uri = cluster
-        if not connection_str and query_source:
-            # try to get cluster and db from query_source metadata
+        if connection_str:
+            return connection_str
+        # try to get cluster and db from kwargs or query_source metadata
+        cluster = self._lookup_cluster(cluster=str(cluster or "Kusto"))
+        if query_source:
             cluster = cluster or query_source.metadata.get("cluster")
+            # try to get cluster and db from query_source metadata
             database = (
                 database
                 or query_source.metadata.get("database")
                 or self._get_db_from_datafamily(query_source, cluster, database)
             )
-            connection_str = self._create_connection(cluster=cluster, database=database)
-            self._cluster_uri = cluster
+        if not database:
+            error_msg: str = "Either database must not be None or query_source must contain database details."
+            raise ValueError(error_msg)
+        connection_str = self._create_connection(
+            cluster=str(cluster), database=database
+        )
+        self._cluster_uri = str(cluster)
         return connection_str
 
     def _get_db_from_datafamily(self, query_source, cluster, database):
@@ -201,7 +208,7 @@ class KustoDriver(KqlDriver):
             qry_db = data_families[0]  # type: ignore
         return qry_db
 
-    def _create_connection(self, cluster, database):
+    def _create_connection(self, cluster: str, database: str) -> Optional[str]:
         """Create the connection string, checking parameters."""
         if not cluster or not database:
             if cluster:
@@ -221,7 +228,7 @@ class KustoDriver(KqlDriver):
                 title="Missing cluster or database names.",
                 parameter=err_mssg,
             )
-        cluster_key = cluster.casefold()
+        cluster_key: str = cluster.casefold()
         if cluster_key not in self._kusto_settings:
             raise MsticpyUserConfigError(
                 f"The cluster {cluster} was not found in the configuration.",
@@ -277,9 +284,10 @@ class KustoDriver(KqlDriver):
             None,
         )
 
-    def _get_endpoint_uri(self):
-        if not self._cluster_uri.endswith("/"):
-            self._cluster_uri += "/"
+    def _get_endpoint_uri(self) -> Optional[str]:
+        if self._cluster_uri:
+            if not self._cluster_uri.endswith("/"):
+                self._cluster_uri += "/"
         return self._cluster_uri
 
 
