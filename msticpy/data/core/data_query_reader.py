@@ -7,7 +7,7 @@
 import logging
 from itertools import chain
 from pathlib import Path
-from typing import Any, Dict, Iterable, Tuple
+from typing import Any, Dict, Iterable, Tuple, Union, Optional
 
 import yaml
 
@@ -16,7 +16,7 @@ from ..._version import VERSION
 __version__ = VERSION
 __author__ = "Ian Hellen"
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def find_yaml_files(source_path: str, recursive: bool = True) -> Iterable[Path]:
@@ -37,7 +37,7 @@ def find_yaml_files(source_path: str, recursive: bool = True) -> Iterable[Path]:
         File paths of yaml files found.
 
     """
-    recurse_pfx = "**/" if recursive else ""
+    recurse_pfx: str = "**/" if recursive else ""
     file_glob = chain(
         Path(source_path).glob(f"{recurse_pfx}*.yaml"),
         Path(source_path).glob(f"{recurse_pfx}*.yml"),
@@ -48,7 +48,7 @@ def find_yaml_files(source_path: str, recursive: bool = True) -> Iterable[Path]:
         yield file_path
 
 
-def read_query_def_file(query_file: str) -> Tuple[Dict, Dict, Dict]:
+def read_query_def_file(query_file: Union[str, Path]) -> Tuple[Dict, Dict, Dict]:
     """
     Read a yaml data query definition file.
 
@@ -66,31 +66,32 @@ def read_query_def_file(query_file: str) -> Tuple[Dict, Dict, Dict]:
         metadata - the global metadata from the file
 
     """
-    data_map = None
-    with open(query_file, "r", encoding="utf-8") as f_handle:
+    if not isinstance(query_file, Path):
+        query_file = Path(query_file)
+    with query_file.open("r", encoding="utf-8") as f_handle:
         # use safe_load instead load
-        data_map = yaml.safe_load(f_handle)
+        data_map: Dict[str, Any] = yaml.safe_load(f_handle)
 
-    try:
-        validate_query_defs(query_def_dict=data_map)
-    except ValueError as err:
-        logger.warning(
-            "Validation failed for query template file %s\n%s",
-            query_file,
-            err,
-            exc_info=True,
-        )
-        raise
+        try:
+            validate_query_defs(query_def_dict=data_map)
+        except ValueError as err:
+            logger.warning(
+                "Validation failed for query template file %s\n%s",
+                query_file,
+                err,
+                exc_info=True,
+            )
+            raise
 
-    defaults = data_map.get("defaults", {})
-    sources = data_map.get("sources", {})
-    metadata = data_map.get("metadata", {})
+        defaults: Dict[str, Any] = data_map.get("defaults", {})
+        sources: Dict[str, Any] = data_map.get("sources", {})
+        metadata: Dict[str, Any] = data_map.get("metadata", {})
 
-    logger.info("Read %s queries from %s", len(sources), query_file)
-    return sources, defaults, metadata
+        logger.info("Read %s queries from %s", len(sources), query_file)
+        return sources, defaults, metadata
 
 
-def validate_query_defs(query_def_dict: Dict[str, Any]) -> bool:
+def validate_query_defs(query_def_dict: Optional[Dict[str, Any]]) -> bool:
     """
     Validate content of query definition.
 
@@ -111,12 +112,12 @@ def validate_query_defs(query_def_dict: Dict[str, Any]) -> bool:
         exception message (arg[0])
 
     """
-    if query_def_dict is None or not query_def_dict:
+    if not query_def_dict:
         raise ValueError("Imported file is empty")
     # verify that sources and metadata are in the data dict
-    if "sources" not in query_def_dict or not query_def_dict["sources"]:
+    if not query_def_dict.get("sources"):
         raise ValueError("Imported file has no sources defined")
-    if "metadata" not in query_def_dict or not query_def_dict["metadata"]:
+    if not query_def_dict.get("metadata"):
         raise ValueError("Imported file has no metadata defined")
 
     # data_environments and data_families must be defined at with at least
@@ -126,7 +127,7 @@ def validate_query_defs(query_def_dict: Dict[str, Any]) -> bool:
     return True
 
 
-def _validate_data_categories(query_def_dict: Dict):
+def _validate_data_categories(query_def_dict: Dict) -> None:
     if (
         "data_environments" not in query_def_dict["metadata"]
         or not query_def_dict["metadata"]["data_environments"]

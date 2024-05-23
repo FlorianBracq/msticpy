@@ -6,10 +6,13 @@
 """Query helper definitions."""
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Union
+from typing import Dict, Type, TypeVar, Union
 
 from ..._version import VERSION
 from ...common.utility import export
+
+DFAMILY = TypeVar("DFAMILY", bound="DataFamily")
+DENV = TypeVar("DENV", bound="DataEnvironment")
 
 __version__ = VERSION
 __author__ = "Ian Hellen"
@@ -40,7 +43,7 @@ class DataFamily(Enum):
     Elastic = 14
 
     @classmethod
-    def parse(cls, value: Union[str, int]) -> "DataFamily":
+    def parse(cls: Type[DFAMILY], value: Union[str, int, DFAMILY, None]) -> DFAMILY:
         """
         Convert string or int to enum.
 
@@ -53,7 +56,7 @@ class DataFamily(Enum):
         if isinstance(value, cls):
             return value
 
-        parsed_enum = cls.Unknown
+        parsed_enum: DFAMILY = cls(0)
         if isinstance(value, str):
             try:
                 parsed_enum = cls[value]
@@ -66,14 +69,14 @@ class DataFamily(Enum):
                         for e_name, e_val in cls.__members__.items()
                         if e_name.upper() == value.upper()
                     ),
-                    cls.Unknown,
+                    cls(0),
                 )
                 # pylint: enable=no-member
         if isinstance(value, int):
             try:
                 parsed_enum = cls(value)
             except ValueError:
-                parsed_enum = cls.Unknown
+                parsed_enum = cls(0)
         return parsed_enum
 
 
@@ -119,7 +122,7 @@ class DataEnvironment(Enum):
     M365DGraph = 20
 
     @classmethod
-    def parse(cls, value: Union[str, int]) -> "DataEnvironment":
+    def parse(cls: Type[DENV], value: Union[str, int, DENV, None]) -> DENV:
         """
         Convert string or int to enum.
 
@@ -132,15 +135,14 @@ class DataEnvironment(Enum):
         if isinstance(value, cls):
             return value
 
-        parsed_enum = cls.Unknown
         if isinstance(value, str):
             try:
-                parsed_enum = cls[value]
+                return cls[value]
             except KeyError:
                 pass
         if isinstance(value, int):
-            parsed_enum = cls(value)
-        return parsed_enum
+            return cls(value)
+        return cls(0)
 
 
 # pylint: disable=too-few-public-methods
@@ -155,7 +157,7 @@ class QueryParamProvider(ABC):
 
     @property
     @abstractmethod
-    def query_params(self):
+    def query_params(self) -> Dict:
         """
         Return dict of query parameters.
 

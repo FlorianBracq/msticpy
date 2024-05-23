@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 __version__ = VERSION
 __author__ = "Ian Hellen"
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 # pylint: disable=too-few-public-methods, unnecessary-ellipsis
@@ -43,9 +43,7 @@ class QueryProviderProtocol(Protocol):
 
     @staticmethod
     @abstractmethod
-    def _get_query_options(
-        params: Dict[str, Any], kwargs: Dict[str, Any]
-    ) -> Dict[str, Any]:
+    def _get_query_options(params: Dict[str, Any], **kwargs: Any) -> Dict[str, Any]:
         """Return any kwargs not already in params."""
 
 
@@ -56,23 +54,21 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
     @staticmethod
     @abstractmethod
     def _get_query_options(
-        params: Dict[str, Any], kwargs: Dict[str, Any]
+        params: Dict[str, Any],
+        *,
+        query_options: Optional[Dict[str, Any]] = None,
+        **kwargs: Any,
     ) -> Dict[str, Any]:
         """Return any kwargs not already in params."""
 
-    def exec_query(
+    def exec_query(  # pylint: disable = too-many-arguments
         self,
         query: str,
         *,
-        time_span: Dict[str, datetime],
-        query_options: Union[Dict[str, Any], None] = None,
-        query_source: Union[QuerySource, None] = None,
         progress: bool = True,
         retry_on_error: bool = False,
         default_time_params: bool = False,
-        debug: bool = False,
-        connection_str: Union[str, None] = None,
-        **provider_params,
+        **provider_params: Any,
     ) -> pd.DataFrame:
         """
         Execute simple query string.
@@ -105,15 +101,6 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         if not self._additional_connections:
             return self._query_provider.query(
                 query,
-                query_source=query_source,
-                progress=progress,
-                retry_on_error=retry_on_error,
-                default_time_params=default_time_params,
-                query_options=query_options,
-                time_span=time_span,
-                debug=debug,
-                connection_str=connection_str,
-                **provider_params,
             )
         return self._exec_additional_connections(
             query,
@@ -126,9 +113,10 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
     def add_connection(
         self,
         connection_str: Optional[str] = None,
+        *,
         alias: Optional[str] = None,
-        **kwargs,
-    ):
+        **kwargs: Any,
+    ) -> None:
         """
         Add an additional connection for the query provider.
 
@@ -151,11 +139,11 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
 
         """
         # create a new instance of the driver class
-        new_driver = self.driver_class(**(self._driver_kwargs))
+        new_driver: DriverBase = self.driver_class(**(self._driver_kwargs))
         # connect
         new_driver.connect(connection_str=connection_str, **kwargs)
         # add to collection
-        driver_key = alias or str(len(self._additional_connections))
+        driver_key: str = alias or str(len(self._additional_connections))
         self._additional_connections[driver_key] = new_driver
 
     def list_connections(self) -> List[str]:
@@ -168,14 +156,13 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             The alias and connection string for each connection.
 
         """
-        add_connections = [
+        add_connections: List[str] = [
             f"{alias}: {driver.current_connection}"
             for alias, driver in self._additional_connections.items()
         ]
         return [f"Default: {self._query_provider.current_connection}", *add_connections]
 
-    # pylint: disable=too-many-locals
-    def _exec_additional_connections(
+    def _exec_additional_connections(  # pylint: disable=too-many-locals
         self,
         query: str,
         *,
@@ -252,7 +239,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             query_tasks=query_tasks,
         )
 
-    def _exec_split_query(
+    def _exec_split_query(  # pylint: disable=too-many-arguments
         self,
         split_by: str,
         *,
@@ -299,14 +286,14 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         executed asynchronously. Otherwise, the queries are executed sequentially.
 
         """
-        split_queries: Dict[Tuple[datetime, datetime], str] = (
-            self._create_split_queries(
-                query_source=query_source,
-                start=start,
-                end=end,
-                split_by=split_by,
-                query_params=query_params,
-            )
+        split_queries: Dict[
+            Tuple[datetime, datetime], str
+        ] = self._create_split_queries(
+            query_source=query_source,
+            start=start,
+            end=end,
+            split_by=split_by,
+            query_params=query_params,
         )
         if debug:
             return "\n\n".join(
@@ -420,7 +407,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
             pass
         logger.info("Using split delta %s", split_delta)
 
-        ranges: List[Tuple[datetime, datetime]] = _calc_split_ranges(
+        ranges: List[Tuple[pd.Timestamp, pd.Timestamp]] = _calc_split_ranges(
             start, end, split_delta
         )
 
@@ -509,14 +496,16 @@ def _get_event_loop() -> asyncio.AbstractEventLoop:
     try:
         if is_ipython():
             nest_asyncio.apply()
-        loop = asyncio.get_running_loop()
+        loop: asyncio.AbstractEventLoop = asyncio.get_running_loop()
     except RuntimeError:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
     return loop
 
 
-def _calc_split_ranges(start: datetime, end: datetime, split_delta: pd.Timedelta):
+def _calc_split_ranges(
+    start: datetime, end: datetime, split_delta: pd.Timedelta
+) -> List[Tuple[pd.Timestamp, pd.Timestamp]]:
     """Return a list of time ranges split by `split_delta`."""
     # Use pandas date_range and split the result into 2 iterables
     s_ranges, e_ranges = tee(pd.date_range(start, end, freq=split_delta))
@@ -526,7 +515,7 @@ def _calc_split_ranges(start: datetime, end: datetime, split_delta: pd.Timedelta
     # to avoid getting duplicated records at the boundaries of the ranges.
     # Some providers don't have nanosecond granularity so we might
     # get duplicates in these cases
-    ranges = [
+    ranges: List[Tuple[pd.Timestamp, pd.Timestamp]] = [
         (s_time, e_time - pd.Timedelta("1ns"))
         for s_time, e_time in zip(s_ranges, e_ranges)
     ]

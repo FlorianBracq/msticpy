@@ -23,14 +23,7 @@ from .query_defns import Formatters
 __version__ = VERSION
 __author__ = "Ian Hellen"
 
-
-def _value_or_default(src_dict: Dict, prop_name: str, default: Dict):
-    """Return value from dict or emtpy dict."""
-    src_value = src_dict.get(prop_name)
-    return src_value if src_value is not None else default
-
-
-RD_UNIT_MAP = {
+RD_UNIT_MAP: Dict[str, str] = {
     "y": "years",
     "mon": "months",
     "w": "weeks",
@@ -65,7 +58,7 @@ class QuerySource:
         source: Dict[str, Any],
         defaults: Dict[str, Any],
         metadata: Dict[str, Any],
-    ):
+    ) -> None:
         """
         Initialize query source definition.
 
@@ -88,7 +81,7 @@ class QuerySource:
 
         """
         self.show = True
-        self.name = name
+        self.name: str = name
         self._source: Dict[str, Any] = source or {}
         self.defaults: Dict[str, Any] = defaults or {}
         self._global_metadata: Dict[str, Any] = dict(metadata) if metadata else {}
@@ -97,7 +90,7 @@ class QuerySource:
         # consolidate source metadata - source-specific
         # overrides global
         # add an empty dict in case neither has defined params
-        self.metadata: Dict[str, Union[str, List[str]]] = collapse_dicts(
+        self.metadata: Dict[str, Any] = collapse_dicts(
             self._global_metadata,
             self.defaults.get("metadata", {}),
             self._source.get("metadata", {}),
@@ -209,7 +202,9 @@ class QuerySource:
         return self.metadata["data_families"]
 
     def create_query(
-        self, formatters: Dict[str, Callable] = None, **kwargs
+        self,
+        formatters: Optional[Dict[str, Callable]] = None,
+        **kwargs,
     ) -> str:  # noqa: MC0001
         """
         Return query with values from kwargs and defaults substituted.
@@ -240,12 +235,12 @@ class QuerySource:
         parameter defaults (see `default_params` property).
 
         """
-        param_dict = {
+        param_dict: Dict[str, Any] = {
             name: value.get("default", None) for name, value in self.params.items()
         }
 
         param_dict.update(self.resolve_param_aliases(kwargs))
-        missing_params = {
+        missing_params: Dict[str, Any] = {
             name: value for name, value in param_dict.items() if value is None
         }
         if missing_params:
@@ -425,7 +420,7 @@ class QuerySource:
                 fmt_list.append(f"{item}")
         return ", ".join(fmt_list)
 
-    def help(self):
+    def help(self) -> None:
         """Print help for query."""
         print("Query: ", self.name)
         if self.query_store is not None:
@@ -540,7 +535,7 @@ class QuerySource:
             valid_failures.append(msg)
         return (not valid_failures, valid_failures)
 
-    def _replace_query_macros(self):
+    def _replace_query_macros(self) -> None:
         """Replace any macro strings in the query with substitutions."""
         replace_keys = re.findall(r"\$\<([^>]+)\>\$?", self._query)
         if not replace_keys:

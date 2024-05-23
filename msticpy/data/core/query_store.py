@@ -19,7 +19,7 @@ from .query_source import QuerySource
 __version__ = VERSION
 __author__ = "Ian Hellen"
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 def _get_dot_path(elem_path: str, data_map: dict) -> Any:
@@ -165,8 +165,8 @@ class QueryStore:
         name: str,
         query: str,
         query_paths: Union[str, List[str]],
-        description: str = None,
-    ):
+        description: Optional[str] = None,
+    ) -> None:
         """
         Add a query from name/query text.
 
@@ -317,7 +317,7 @@ class QueryStore:
         return env_stores
 
     def get_query(
-        self, query_name: str, query_path: Union[str, DataFamily] = None
+        self, query_name: str, query_path: Optional[Union[str, DataFamily]] = None
     ) -> "QuerySource":
         """
         Return query with name `data_family` and `query_name`.
@@ -335,23 +335,26 @@ class QueryStore:
             Query matching name and family.
 
         """
-        if query_path and isinstance(query_path, DataFamily):
-            query_path = query_path.name
+        if query_path:
+            if isinstance(query_path, DataFamily):
+                query_path_str: str = query_path.name
+            else:
+                query_path_str = query_path
         if "." in query_name:
-            query_parts = query_name.split(".")
-            query_container = ".".join(query_parts[:-1])
+            query_parts: List[str] = query_name.split(".")
+            query_container: str = ".".join(query_parts[:-1])
             query_name = query_parts[-1]
             if query_container in self.data_families:
                 query_path = query_container
-            elif query_path:
-                query_container = ".".join(
-                    [query_path, query_container]  # type: ignore
-                )
+            elif query_path_str:
+                query_container = ".".join([query_path_str, query_container])
                 if query_container in self.data_families:
                     query_path = query_container
-        query = self.data_families.get(query_path, {}).get(query_name)  # type: ignore
+        query: Optional[QuerySource] = self.data_families.get(query_path_str, {}).get(
+            query_name
+        )
         if not query:
-            raise LookupError(f"Could not find {query_name} in path {query_path}.")
+            raise LookupError(f"Could not find {query_name} in path {query_path_str}.")
         return query
 
     def find_query(self, query_name: str) -> Set[Optional[QuerySource]]:
@@ -384,7 +387,7 @@ def _matches_driver_filter(
     for item_name, filter_value in filter_spec.items():
         if not filter_value:
             continue
-        source_name = "data_source" if item_name == "data_sources" else item_name
+        source_name: str = "data_source" if item_name == "data_sources" else item_name
         source_val = query_source.metadata.get(source_name)
         if isinstance(source_val, list):
             match &= bool(filter_value & set(source_val))
