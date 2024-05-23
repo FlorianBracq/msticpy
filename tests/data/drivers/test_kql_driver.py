@@ -6,6 +6,7 @@
 """KQL driver query test class."""
 import io
 from contextlib import redirect_stdout
+from typing import Any, Dict
 from unittest.mock import patch
 
 import pandas as pd
@@ -15,6 +16,7 @@ from adal.adal_error import AdalError
 from Kqlmagic.kql_engine import KqlEngineError
 from Kqlmagic.kql_response import KqlError
 from Kqlmagic.my_aad_helper import AuthenticationError
+from Kqlmagic.results import ResultSet
 
 from msticpy.common.exceptions import (
     MsticpyDataQueryError,
@@ -38,15 +40,19 @@ GET_IPYTHON_PATCH = KqlDriver.__module__ + ".get_ipython"
 # pylint: disable=no-self-use, redefined-outer-name
 
 
-class KqlResultTest:
+class KqlResultTest(ResultSet):
     """Test Kql result class."""
 
-    def __init__(self, code=0, partial=False, status="success"):
+    def __init__(self, code=0, partial=False, status="success") -> None:
         """Create instance."""
-        self.completion_query_info = {"StatusCode": code, "StatusDescription": status}
-        self.is_partial_table = partial
+        super().__init__(metadata={}, queryResult=None)
+        self._completion_query_info: Dict[str, Any] = {
+            "StatusCode": code,
+            "StatusDescription": status,
+        }
+        self.is_partial_table: bool = partial
 
-    def to_dataframe(self):
+    def to_dataframe(self) -> pd.DataFrame:
         """Convert dataframe."""
         return pd.DataFrame()
 
