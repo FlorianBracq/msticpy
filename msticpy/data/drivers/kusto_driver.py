@@ -186,8 +186,7 @@ class KustoDriver(KqlDriver):
                 or self._get_db_from_datafamily(query_source, cluster, database)
             )
         if not database:
-            error_msg: str = "Either database must not be None or query_source must contain database details."
-            raise ValueError(error_msg)
+            return None
         connection_str = self._create_connection(
             cluster=str(cluster), database=database
         )
