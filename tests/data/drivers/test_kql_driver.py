@@ -43,13 +43,15 @@ GET_IPYTHON_PATCH = KqlDriver.__module__ + ".get_ipython"
 class KqlResultTest(ResultSet):
     """Test Kql result class."""
 
-    def __init__(self, code=0, partial=False, status="success") -> None:
+    def __init__(  # pylint:disable=super-init-not-called
+        self, code=0, partial=False, status="success"
+    ) -> None:
         """Create instance."""
-        super().__init__(metadata={}, queryResult=None)
         self._completion_query_info: Dict[str, Any] = {
             "StatusCode": code,
             "StatusDescription": status,
         }
+        self.options: Dict[str, Any] = {}
         self.is_partial_table: bool = partial
 
     def to_dataframe(self) -> pd.DataFrame:
