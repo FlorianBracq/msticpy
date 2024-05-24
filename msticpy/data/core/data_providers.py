@@ -270,11 +270,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             query_source.help()
             raise ValueError(f"No values found for these parameters: {missing}")
 
-        split: Union[str, None] = None
-        if split_by:
-            split = split_by
-        elif split_query_by:
-            split = split_by
+        split: Union[str, None] = split_by or split_query_by
 
         if split:
             logger.info("Split query selected - interval - %s", split)
