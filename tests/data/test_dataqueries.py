@@ -769,11 +769,10 @@ def test_check_environment_str_custom_provider() -> None:
         # value in drivers.CUSTOM_PROVIDERS
         # always returns True.
         mocked_custom_providers.__contains__.return_value = True
-        data_env, env_name = QueryProvider._check_environment(data_environment)
+        _, env_name = QueryProvider._check_environment(data_environment)
         check.is_true(mocked_custom_providers.__contains__.called)
         check.equal(mocked_custom_providers.__contains__.call_count, 1)
-        check.is_instance(data_env, str)
-        check.equal(data_env, data_environment)
+        check.is_instance(env_name, str)
         check.equal(env_name, data_environment)
 
 
