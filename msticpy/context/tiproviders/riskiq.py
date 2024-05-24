@@ -118,7 +118,7 @@ class RiskIQ(TIProvider, TIPivotProvider):
 
     def __init__(self, **kwargs):
         """Instantiate RiskIQ class."""
-        super().__init__(**kwargs)
+        super().__init__()
         ptanalyzer.init(username=kwargs.get("ApiID"), api_key=kwargs.get("AuthKey"))
         self._pivot_timespan_start: Optional[datetime] = None
         self._pivot_timespan_end: Optional[datetime] = None
@@ -147,7 +147,11 @@ class RiskIQ(TIProvider, TIPivotProvider):
         }.get(classification, ResultSeverity.information)
 
     def lookup_ioc(
-        self, ioc: str, ioc_type: str = None, query_type: str = None, **kwargs
+        self,
+        ioc: str,
+        ioc_type: Optional[str] = None,
+        query_type: Optional[str] = None,
+        **kwargs,
     ) -> pd.DataFrame:
         """
         Lookup a single IoC observable.

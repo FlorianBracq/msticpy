@@ -18,7 +18,18 @@ import contextlib
 import warnings
 from collections import defaultdict
 from functools import lru_cache
-from typing import Any, Callable, DefaultDict, Dict, Iterable, List, Set, Tuple, Union
+from typing import (
+    Any,
+    Callable,
+    DefaultDict,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Union,
+)
 
 import pandas as pd
 
@@ -49,7 +60,7 @@ class KqlTIProvider(TIProvider):
 
     def __init__(self, **kwargs):
         """Initialize a new instance of the class."""
-        super().__init__(**kwargs)
+        super().__init__()
 
         if "query_provider" in kwargs and isinstance(
             kwargs["query_provider"], QueryProvider
@@ -70,7 +81,11 @@ class KqlTIProvider(TIProvider):
 
     @lru_cache(maxsize=256)
     def lookup_ioc(  # type: ignore
-        self, ioc: str, ioc_type: str = None, query_type: str = None, **kwargs
+        self,
+        ioc: str,
+        ioc_type: Optional[str] = None,
+        query_type: Optional[str] = None,
+        **kwargs,
     ) -> pd.DataFrame:
         """
         Lookup from a value.
@@ -114,9 +129,9 @@ class KqlTIProvider(TIProvider):
     def lookup_iocs(
         self,
         data: Union[pd.DataFrame, Dict[str, str], Iterable[str]],
-        ioc_col: str = None,
-        ioc_type_col: str = None,
-        query_type: str = None,
+        ioc_col: Optional[str] = None,
+        ioc_type_col: Optional[str] = None,
+        query_type: Optional[str] = None,
         **kwargs,
     ) -> pd.DataFrame:
         """
@@ -318,7 +333,7 @@ class KqlTIProvider(TIProvider):
         self,
         ioc: Union[str, List[str]],
         ioc_type: str,
-        query_type: str = None,
+        query_type: Optional[str] = None,
         **kwargs,
     ) -> Tuple[Callable, Dict[str, Any]]:
         ioc_key = f"{ioc_type}-{query_type}" if query_type else ioc_type
