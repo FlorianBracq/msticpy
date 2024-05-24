@@ -194,7 +194,7 @@ class KustoDriver(KqlDriver):
         self._cluster_uri = str(cluster)
         return connection_str
 
-    def _get_db_from_datafamily(self, query_source, cluster, database):
+    def _get_db_from_datafamily(self, query_source, cluster, database) -> str:
         data_families = query_source.metadata.get("data_families")
         if (
             not isinstance(data_families, list) or len(data_families) == 0
@@ -205,7 +205,7 @@ class KustoDriver(KqlDriver):
             _, qry_db = data_families[0].split(".", maxsplit=1)  # type: ignore
         else:
             # Not expected but we can still use a DB value with no dot
-            qry_db = data_families[0]  # type: ignore
+            qry_db: str = data_families[0]  # type: ignore
         return qry_db
 
     def _create_connection(self, cluster: str, database: str) -> Optional[str]:

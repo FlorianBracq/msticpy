@@ -19,6 +19,8 @@ import pandas as pd
 import yaml
 from tqdm.auto import tqdm
 
+from msticpy.data.core.query_defns import DataEnvironment
+
 from ..._version import VERSION
 from ...common.exceptions import MsticpyUserError
 from ...common.pkg_config import get_config
@@ -55,9 +57,18 @@ _HTTP_TIMEOUT = DriverBase.get_http_timeout()
 class MordorDriver(DriverBase):
     """Mordor data driver."""
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        data_environment: Optional[DataEnvironment] = DataEnvironment.Mordor,
+        *,
+        max_threads: int = 4,
+        **kwargs,
+    ) -> None:
         """Initialize the Mordor driver."""
-        super().__init__(**kwargs)
+        super().__init__(
+            data_environment=data_environment,
+            max_threads=max_threads,
+        )
         self.use_query_paths = False
         self.has_driver_queries = True
         self.mitre_techniques: pd.DataFrame

@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
+from msticpy.data.core.query_defns import DataEnvironment
+
 from ..._version import VERSION
 from ...common.pkg_config import get_config, has_config
 from ...common.utility import export
@@ -22,7 +24,15 @@ __author__ = "Ian Hellen"
 class LocalDataDriver(DriverBase):
     """LocalDataDriver class to execute kql queries."""
 
-    def __init__(self, connection_str: str = None, **kwargs):
+    def __init__(
+        self,
+        connection_str: Optional[str] = None,
+        data_environment: Optional[DataEnvironment] = DataEnvironment.LocalData,
+        *,
+        max_threads: int = 4,
+        debug: bool = False,
+        **kwargs,
+    ) -> None:
         """
         Instantiate LocalDataDriver and optionally connect.
 
@@ -35,8 +45,8 @@ class LocalDataDriver(DriverBase):
 
         """
         del connection_str
-        self._debug = kwargs.get("debug", False)
-        super().__init__(**kwargs)
+        self._debug: bool = debug
+        super().__init__(data_environment=data_environment, max_threads=max_threads)
 
         self._paths: List[str] = ["."]
         if data_paths := kwargs.get("data_paths"):
