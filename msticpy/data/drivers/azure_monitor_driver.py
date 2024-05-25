@@ -26,10 +26,9 @@ from azure.core.exceptions import HttpResponseError
 from azure.core.pipeline.policies import UserAgentPolicy
 from pkg_resources import parse_version
 
-from msticpy.auth.azure_auth_core import AzCredentials
-
 from ..._version import VERSION
 from ...auth.azure_auth import AzureCloudConfig, az_connect
+from ...auth.azure_auth_core import AzCredentials
 from ...common.exceptions import (
     MsticpyDataQueryError,
     MsticpyKqlConnectionError,
@@ -370,11 +369,11 @@ class AzureMonitorDriver(DriverBase):
                 title="Workspace not connected.",
                 help_uri=_HELP_URL,
             )
-        time_span_value: Optional[
-            Tuple[datetime, datetime]
-        ] = self._get_time_span_value(
-            default_time_params=default_time_params,
-            time_span=time_span,
+        time_span_value: Optional[Tuple[datetime, datetime]] = (
+            self._get_time_span_value(
+                default_time_params=default_time_params,
+                time_span=time_span,
+            )
         )
         server_timeout: int = timeout or self._def_timeout
 
@@ -395,14 +394,14 @@ class AzureMonitorDriver(DriverBase):
         )
         logger.info("Timeout %s", server_timeout)
         try:
-            result: Optional[
-                Union[LogsQueryResult, LogsQueryPartialResult]
-            ] = self._query_client.query_workspace(
-                workspace_id=workspace_id,  # type: ignore[arg-type]
-                query=query,
-                timespan=time_span_value,  # type: ignore[arg-type]
-                server_timeout=server_timeout,
-                additional_workspaces=additional_workspaces,
+            result: Optional[Union[LogsQueryResult, LogsQueryPartialResult]] = (
+                self._query_client.query_workspace(
+                    workspace_id=workspace_id,  # type: ignore[arg-type]
+                    query=query,
+                    timespan=time_span_value,  # type: ignore[arg-type]
+                    server_timeout=server_timeout,
+                    additional_workspaces=additional_workspaces,
+                )
             )
         except HttpResponseError as http_err:
             result = None

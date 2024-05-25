@@ -18,10 +18,9 @@ from azure.core.exceptions import ClientAuthenticationError
 from IPython.core.getipython import get_ipython
 from IPython.core.interactiveshell import InteractiveShell
 
-from msticpy.auth.azure_auth_core import AzCredentials
-
 from ..._version import VERSION
 from ...auth.azure_auth import AzureCloudConfig, az_connect, only_interactive_cred
+from ...auth.azure_auth_core import AzCredentials
 from ...common.exceptions import (
     MsticpyDataQueryError,
     MsticpyImportExtraError,

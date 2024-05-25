@@ -17,11 +17,13 @@ import httpx
 import pandas as pd
 from tqdm.auto import tqdm
 
-from msticpy.common.provider_settings import ProviderSettings
-
 from ..._version import VERSION
 from ...common.exceptions import MsticpyUserConfigError
-from ...common.provider_settings import ProviderArgs, get_provider_settings
+from ...common.provider_settings import (
+    ProviderArgs,
+    ProviderSettings,
+    get_provider_settings,
+)
 from ...common.utility import mp_ua_header
 from ..core.query_defns import DataEnvironment, Formatters
 from ..core.query_provider_connections_mixin import _get_event_loop

@@ -31,8 +31,7 @@ from dateutil import parser
 from .._version import VERSION
 from ..common.exceptions import MsticpyAzureConfigError
 
-# pylint: disable=unused-import
-from .cloud_mappings import AzureCloudConfig, default_auth_methods  # noqa: F401
+from .cloud_mappings import AzureCloudConfig
 from .cred_wrapper import CredentialWrapper
 
 __version__ = VERSION

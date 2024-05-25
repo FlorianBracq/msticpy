@@ -4,15 +4,14 @@
 # license information.
 # --------------------------------------------------------------------------
 """Security Graph OData Driver class."""
-from typing import Optional, Union, List
+from typing import List, Optional, Union
 
 import pandas as pd
-
-from msticpy.data.core.query_defns import DataEnvironment
 
 from ..._version import VERSION
 from ...auth.azure_auth_core import AzureCloudConfig
 from ...common.utility import export
+from ..core.query_defns import DataEnvironment
 from .odata_driver import OData
 
 __version__ = VERSION

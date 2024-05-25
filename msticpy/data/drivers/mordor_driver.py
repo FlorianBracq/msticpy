@@ -19,12 +19,11 @@ import pandas as pd
 import yaml
 from tqdm.auto import tqdm
 
-from msticpy.data.core.query_defns import DataEnvironment
-
 from ..._version import VERSION
 from ...common.exceptions import MsticpyUserError
 from ...common.pkg_config import get_config
 from ...common.utility import mp_ua_header
+from ..core.query_defns import DataEnvironment
 from ..core.query_source import QuerySource
 from .driver_base import DriverBase, DriverProps
 

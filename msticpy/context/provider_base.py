@@ -18,22 +18,17 @@ from abc import ABC, abstractmethod
 from asyncio import get_event_loop
 from collections.abc import Iterable as C_Iterable
 from functools import lru_cache, partial, singledispatch
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import pandas as pd
-
-from msticpy.context.lookup_result import SanitizedObservable
 
 from .._version import VERSION
 from ..common.utility import export
 from ..transform.iocextract import IoCExtract as ItemExtract
 from ..transform.iocextract import IoCType as Type
-from .lookup_result import LookupStatus
+from .lookup import ProgressCounter
+from .lookup_result import LookupStatus, SanitizedObservable
 from .preprocess_observable import PreProcessor
-
-if TYPE_CHECKING:
-    from msticpy.context.lookup import ProgressCounter
-
 
 __version__ = VERSION
 __author__ = "Ian Hellen"

@@ -13,13 +13,12 @@ import pandas as pd
 from azure.mgmt.subscription import SubscriptionClient
 from pandas.core.frame import DataFrame
 
-from msticpy.auth.azure_auth_core import AzCredentials
-from msticpy.data.core.query_defns import DataEnvironment
-
 from ..._version import VERSION
 from ...auth.azure_auth import AzureCloudConfig, az_connect, only_interactive_cred
+from ...auth.azure_auth_core import AzCredentials
 from ...common.exceptions import MsticpyImportExtraError, MsticpyNotConnectedError
 from ...common.utility import export
+from ...data.core.query_defns import DataEnvironment
 from .driver_base import DriverBase, QuerySource
 
 try:

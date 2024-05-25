@@ -12,14 +12,13 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import httpx
 import pandas as pd
 
-from msticpy.data.core.query_defns import DataEnvironment
-
 from ..._version import VERSION
 from ...auth.msal_auth import MSALDelegatedAuth
 from ...common.exceptions import MsticpyConnectionError, MsticpyUserConfigError
 from ...common.pkg_config import get_config
 from ...common.provider_settings import ProviderSettings, get_provider_settings
 from ...common.utility import mp_ua_header
+from ..core.query_defns import DataEnvironment
 from .driver_base import DriverBase, DriverProps
 
 __version__ = VERSION

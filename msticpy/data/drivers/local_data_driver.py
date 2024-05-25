@@ -9,11 +9,10 @@ from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
-from msticpy.data.core.query_defns import DataEnvironment
-
 from ..._version import VERSION
 from ...common.pkg_config import get_config, has_config
 from ...common.utility import export
+from ..core.query_defns import DataEnvironment
 from .driver_base import DriverBase, QuerySource
 
 __version__ = VERSION

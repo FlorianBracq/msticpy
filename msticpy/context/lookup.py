@@ -23,12 +23,15 @@ import nest_asyncio
 import pandas as pd
 from tqdm.auto import tqdm
 
-from msticpy.common.provider_settings import ProviderSettings
-from msticpy.nbwidgets.select_item import SelectItem
 
+from ..nbwidgets.select_item import SelectItem
 from .._version import VERSION
 from ..common.exceptions import MsticpyConfigError, MsticpyUserConfigError
-from ..common.provider_settings import get_provider_settings, reload_settings
+from ..common.provider_settings import (
+    get_provider_settings,
+    reload_settings,
+    ProviderSettings,
+)
 from ..common.utility import export, is_ipython
 from ..vis.ti_browser import browse_results
 from .lookup_result import LookupStatus

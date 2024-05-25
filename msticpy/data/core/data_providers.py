@@ -11,9 +11,8 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import pandas as pd
 
-from msticpy.common.pkg_config import get_config
-
 from ..._version import VERSION
+from ...common.pkg_config import get_config
 from ...common.utility import export, valid_pyname
 from ...nbwidgets.query_time import QueryTime
 from .. import drivers
@@ -159,7 +158,9 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             raise TypeError(f"Unknown data environment {data_environment}")
         if isinstance(data_environment, DataEnvironment):
             return data_environment, data_environment.name
-        error_msg: str = f"Unknown data environment type {data_environment} ({type(data_environment)})"
+        error_msg: str = (
+            f"Unknown data environment type {data_environment} ({type(data_environment)})"
+        )
         raise TypeError(error_msg)
 
     def __getattr__(self, name):
