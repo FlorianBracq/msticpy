@@ -117,8 +117,8 @@ class KustoDriver(KqlDriver):
     def query(
         self,
         query: str,
-        query_source: Optional[QuerySource] = None,
         *,
+        query_source: Optional[QuerySource] = None,
         cluster: Union[str, None] = None,
         database: Union[str, None] = None,
         connection_str: Union[str, None] = None,

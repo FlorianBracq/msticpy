@@ -12,6 +12,7 @@ from ..._version import VERSION
 from ...auth.azure_auth_core import AzureCloudConfig
 from ...common.utility import export
 from ..core.query_defns import DataEnvironment
+from ..core.query_source import QuerySource
 from .odata_driver import OData
 
 __version__ = VERSION
@@ -71,6 +72,8 @@ class SecurityGraphDriver(OData):
     def query(
         self,
         query: str,
+        *,
+        query_source: Optional[QuerySource] = None,
     ) -> pd.DataFrame:
         """
         Execute query string and return DataFrame of results.
@@ -87,4 +90,5 @@ class SecurityGraphDriver(OData):
             the underlying provider result if an error.
 
         """
+        del query_source
         return self.query_with_results(query, body=False)[0]

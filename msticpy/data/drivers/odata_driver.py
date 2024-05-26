@@ -19,6 +19,7 @@ from ...common.pkg_config import get_config
 from ...common.provider_settings import ProviderSettings, get_provider_settings
 from ...common.utility import mp_ua_header
 from ..core.query_defns import DataEnvironment
+from ..core.query_source import QuerySource
 from .driver_base import DriverBase, DriverProps
 
 __version__ = VERSION
@@ -80,6 +81,8 @@ class OData(DriverBase):
     def query(
         self,
         query: str,
+        *,
+        query_source: Optional[QuerySource] = None,
     ) -> pd.DataFrame:
         """
         Execute query string and return DataFrame of results.

@@ -293,8 +293,8 @@ class AzureMonitorDriver(DriverBase):
         self,
         query: str,
         *,
-        time_span: Optional[Dict[str, datetime]] = None,
         query_source: Optional[QuerySource] = None,
+        time_span: Optional[Dict[str, datetime]] = None,
         default_time_params: bool = False,
     ) -> Union[pd.DataFrame, Any]:
         """
@@ -369,11 +369,11 @@ class AzureMonitorDriver(DriverBase):
                 title="Workspace not connected.",
                 help_uri=_HELP_URL,
             )
-        time_span_value: Optional[Tuple[datetime, datetime]] = (
-            self._get_time_span_value(
-                default_time_params=default_time_params,
-                time_span=time_span,
-            )
+        time_span_value: Optional[
+            Tuple[datetime, datetime]
+        ] = self._get_time_span_value(
+            default_time_params=default_time_params,
+            time_span=time_span,
         )
         server_timeout: int = timeout or self._def_timeout
 
@@ -394,14 +394,14 @@ class AzureMonitorDriver(DriverBase):
         )
         logger.info("Timeout %s", server_timeout)
         try:
-            result: Optional[Union[LogsQueryResult, LogsQueryPartialResult]] = (
-                self._query_client.query_workspace(
-                    workspace_id=workspace_id,  # type: ignore[arg-type]
-                    query=query,
-                    timespan=time_span_value,  # type: ignore[arg-type]
-                    server_timeout=server_timeout,
-                    additional_workspaces=additional_workspaces,
-                )
+            result: Optional[
+                Union[LogsQueryResult, LogsQueryPartialResult]
+            ] = self._query_client.query_workspace(
+                workspace_id=workspace_id,  # type: ignore[arg-type]
+                query=query,
+                timespan=time_span_value,  # type: ignore[arg-type]
+                server_timeout=server_timeout,
+                additional_workspaces=additional_workspaces,
             )
         except HttpResponseError as http_err:
             result = None

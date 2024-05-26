@@ -189,6 +189,8 @@ class DriverBase(ABC):
     def query(  # pylint: disable = too-many-arguments
         self,
         query: str,
+        *,
+        query_source: Optional[QuerySource] = None,
     ) -> pd.DataFrame:
         """
         Execute query string and return DataFrame of results.

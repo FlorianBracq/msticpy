@@ -256,6 +256,7 @@ class KqlDriver(DriverBase):
     def query(
         self,
         query: str,
+        *,
         query_source: Optional[QuerySource] = None,
         **kwargs,
     ) -> Union[pd.DataFrame, Any]:

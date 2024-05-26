@@ -122,6 +122,7 @@ class ResourceGraphDriver(DriverBase):
     def query(
         self,
         query: str,
+        *,
         query_source: Optional[QuerySource] = None,
         top: int = 1000,
     ) -> Union[pd.DataFrame, Any]:
