@@ -39,6 +39,7 @@ from .lookup_result import LookupStatus
 # used in dynamic instantiation of providers
 from .provider_base import Provider, _make_sync
 
+
 __version__ = VERSION
 __author__ = "Florian Bracq"
 
