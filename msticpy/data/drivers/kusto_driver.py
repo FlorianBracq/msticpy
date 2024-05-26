@@ -152,14 +152,14 @@ class KustoDriver(KqlDriver):
             the underlying provider result if an error.
 
         """
-        new_connection = self._get_connection_string(
+        new_connection: Optional[str] = self._get_connection_string(
             query_source=query_source,
             cluster=cluster,
             database=database,
             connection_str=connection_str,
         )
         if new_connection:
-            self.current_connection = new_connection
+            self.current_connection: str = new_connection
         data, result = self.query_with_results(query, **kwargs)
         return data if data is not None else result
 
@@ -175,7 +175,7 @@ class KustoDriver(KqlDriver):
         # If the connection string is supplied as a parameter, use that
         if connection_str:
             return connection_str
-        # try to get cluster and db from kwargs or query_source metadata
+        # try to get cluster and db from query_source metadata
         cluster = self._lookup_cluster(cluster=str(cluster or "Kusto"))
         if query_source:
             cluster = cluster or query_source.metadata.get("cluster")
@@ -185,12 +185,11 @@ class KustoDriver(KqlDriver):
                 or query_source.metadata.get("database")
                 or self._get_db_from_datafamily(query_source, cluster, database)
             )
-        if not database:
-            return None
-        connection_str = self._create_connection(
-            cluster=str(cluster), database=database
-        )
-        self._cluster_uri = str(cluster)
+        if cluster and database:
+            connection_str = self._create_connection(
+                cluster=str(cluster), database=database
+            )
+            self._cluster_uri = str(cluster)
         return connection_str
 
     def _get_db_from_datafamily(self, query_source, cluster, database) -> str:
