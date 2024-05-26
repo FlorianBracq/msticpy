@@ -65,6 +65,7 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         self,
         query: str,
         *,
+        query_source: Optional[QuerySource] = None,
         progress: bool = True,
         retry_on_error: bool = False,
         default_time_params: bool = False,
@@ -101,6 +102,8 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         if not self._additional_connections:
             return self._query_provider.query(
                 query,
+                query_source=query_source,
+                **provider_params,
             )
         return self._exec_additional_connections(
             query,
