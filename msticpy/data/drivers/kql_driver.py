@@ -258,7 +258,7 @@ class KqlDriver(DriverBase):
         query: str,
         *,
         query_source: Optional[QuerySource] = None,
-        **kwargs,
+        timeout: Optional[int] = None,
     ) -> Union[pd.DataFrame, Any]:
         """
         Execute query string and return DataFrame of results.
@@ -291,7 +291,7 @@ class KqlDriver(DriverBase):
                         " or database schema. Please check your this",
                         title=f"{table} not found.",
                     )
-        data, result = self.query_with_results(query, **kwargs)
+        data, result = self.query_with_results(query, timeout=timeout)
         return data if data is not None else result
 
     def query_with_results(
@@ -299,7 +299,7 @@ class KqlDriver(DriverBase):
         query: str,
         *,
         debug: bool = False,
-        **kwargs,
+        timeout: Optional[int] = None,
     ) -> Tuple[pd.DataFrame, Union[ResultSet, Dict[str, Any]]]:
         """
         Execute query string and return DataFrame of results.
@@ -335,11 +335,7 @@ class KqlDriver(DriverBase):
             query = f"{query}\n;"
 
         # Add any Kqlmagic options from kwargs
-        kql_opts = {
-            option: option_val
-            for option, option_val in kwargs.items()
-            if option in _KQL_OPTIONS
-        }
+        kql_opts = {"timeout": timeout}
         result = kql_exec(query, options=kql_opts)
         self._set_kql_option(option="auto_dataframe", value=auto_dataframe)
         if result is not None:
@@ -611,7 +607,7 @@ class KqlDriver(DriverBase):
         if only_interactive_cred(creds.modern):
             print("Check your default browser for interactive sign-in prompt.")
 
-        endpoint_uri: str = self._get_endpoint_uri()
+        endpoint_uri: Optional[str] = self._get_endpoint_uri()
         endpoint_token_uri = f"{endpoint_uri}.default"
         # obtain token for the endpoint
         with contextlib.suppress(ClientAuthenticationError):
@@ -626,5 +622,5 @@ class KqlDriver(DriverBase):
             }
             self._set_kql_option("try_token", endpoint_token)
 
-    def _get_endpoint_uri(self) -> str:
+    def _get_endpoint_uri(self) -> Optional[str]:
         return self.az_cloud_config.log_analytics_uri
