@@ -113,10 +113,11 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         else:
             self.driver_class = driver.__class__
         # allow the driver to override the data environment used for selecting queries
-        self.environment_name = (
-            driver.get_driver_property(DriverProps.EFFECTIVE_ENV)
-            or self.environment_name
-        )
+        effective_env: str = driver.get_driver_property(DriverProps.EFFECTIVE_ENV)
+        if effective_env != DataEnvironment.Unknown.name:
+            self.environment_name = driver.get_driver_property(
+                DriverProps.EFFECTIVE_ENV
+            )
         logger.info("Using data environment %s", self.environment_name)
         logger.info("Driver class: %s", self.driver_class.__name__)
 
