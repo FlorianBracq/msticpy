@@ -295,7 +295,7 @@ class DriverBase(ABC):
         """Return value or KeyError from driver properties."""
         return self.properties[name]
 
-    def query_usable(self, _: QuerySource) -> bool:
+    def query_usable(self) -> bool:
         """Return True if query should be exposed for this driver."""
         return True
 

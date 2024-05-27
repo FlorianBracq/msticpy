@@ -490,7 +490,7 @@ class TestDataQuery(TestCase):
 
     def test_query_usable(self) -> None:
         """Test default implementation of method query_usable."""
-        self.assertTrue(self.provider.query_usable(query_source=None))
+        self.assertTrue(self.provider.query_usable())
 
     def test_execute_query_provider_not_loaded(self) -> None:
         """Test method _execute_query when driver is not loaded."""

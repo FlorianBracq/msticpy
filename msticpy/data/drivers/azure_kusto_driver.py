@@ -779,7 +779,10 @@ class AzureKustoDriver(DriverBase):
             return self._default_database
         _raise_no_db_error()
 
-    def query_usable(self, query_source: QuerySource) -> bool:
+    def query_usable(
+        self,
+        query_source: Optional[QuerySource] = None,
+    ) -> bool:
         """Return True if query source is valid for current cluster."""
         if not query_source or not isinstance(query_source, QuerySource):
             return False
