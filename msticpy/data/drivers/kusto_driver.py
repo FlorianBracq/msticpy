@@ -87,12 +87,12 @@ class KustoDriver(KqlDriver):
             authentication.
 
         """
-        self.current_connection = self._get_connection_string(
-            connection_str=connection_str, **kwargs
+        self.current_connection: Optional[str] = self._get_connection_string(
+            query_source=query_source,
+            connection_str=connection_str,
+            database=database,
+            cluster=cluster,
         )
-
-        mp_az_auth = kwargs.pop("mp_az_auth", None)
-        mp_az_tenant_id = kwargs.pop("mp_az_tenant_id", None)
 
         if (
             self._cluster_uri
@@ -159,7 +159,7 @@ class KustoDriver(KqlDriver):
             connection_str=connection_str,
         )
         if new_connection:
-            self.current_connection: str = new_connection
+            self.current_connection = new_connection
         data, result = self.query_with_results(query, **kwargs)
         return data if data is not None else result
 
@@ -169,7 +169,7 @@ class KustoDriver(KqlDriver):
         *,
         connection_str: Optional[str] = None,
         database: Optional[str] = None,
-        cluster: Optional[Union[str, ProviderArgs]] = None,
+        cluster: Optional[str] = None,
     ) -> Optional[str]:
         """Create a connection string from arguments and configuration."""
         # If the connection string is supplied as a parameter, use that
@@ -185,11 +185,9 @@ class KustoDriver(KqlDriver):
                 or query_source.metadata.get("database")
                 or self._get_db_from_datafamily(query_source, cluster, database)
             )
-        if cluster and database:
-            connection_str = self._create_connection(
-                cluster=str(cluster), database=database
-            )
-            self._cluster_uri = str(cluster)
+        if query_source or (database and cluster):
+            connection_str = self._create_connection(cluster=cluster, database=database)
+            self._cluster_uri = cluster
         return connection_str
 
     def _get_db_from_datafamily(self, query_source, cluster, database) -> str:
@@ -206,11 +204,15 @@ class KustoDriver(KqlDriver):
             qry_db: str = data_families[0]  # type: ignore
         return qry_db
 
-    def _create_connection(self, cluster: str, database: str) -> Optional[str]:
+    def _create_connection(
+        self,
+        cluster: Optional[str],
+        database: Optional[str],
+    ) -> Optional[str]:
         """Create the connection string, checking parameters."""
         if not cluster or not database:
             if cluster:
-                err_mssg = "database name"
+                err_mssg: str = "database name"
             elif database:
                 err_mssg = "cluster uri"
             else:
@@ -263,13 +265,13 @@ class KustoDriver(KqlDriver):
             auth_string = _KCS_APP.format(**fmt_items)
         return _KCS_TEMPLATE.format(auth=auth_string, **fmt_items)
 
-    def _lookup_cluster(self, cluster: str):
+    def _lookup_cluster(self, cluster: str) -> Optional[str]:
         """Return cluster URI from config if cluster name is passed."""
         if cluster.strip().casefold().startswith("https://"):
             return cluster
         return next(
             (
-                kusto_config["cluster"]
+                str(kusto_config["cluster"])
                 for cluster_key, kusto_config in self._kusto_settings.items()
                 if (
                     cluster_key.startswith(f"https://{cluster.casefold()}.")

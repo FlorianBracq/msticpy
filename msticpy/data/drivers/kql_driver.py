@@ -133,7 +133,7 @@ class KqlDriver(DriverBase):
         )
         self.kql_cloud, self.az_cloud = self._set_kql_cloud()
 
-        self.current_connection = ""
+        self.current_connection: Optional[str] = None
         self.current_connection_args: Dict[str, Any] = {}
         if connection_str:
             self.current_connection = connection_str
