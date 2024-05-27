@@ -71,7 +71,7 @@ class OTX(HttpTIProvider):
 
     def __init__(self, **kwargs):
         """Set OTX specific settings."""
-        super().__init__(**kwargs)
+        super().__init__()
         self.require_url_encoding = True
 
     def parse_results(self, response: Dict) -> Tuple[bool, ResultSeverity, Any]:
