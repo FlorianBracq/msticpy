@@ -338,7 +338,7 @@ class QueryStore:
 
         """
         if query_path:
-            if isinstance(query_path, DataFamily):
+            if not isinstance(query_path, str):
                 query_path_str: str = query_path.name
             else:
                 query_path_str = query_path
@@ -347,11 +347,11 @@ class QueryStore:
             query_container: str = ".".join(query_parts[:-1])
             query_name = query_parts[-1]
             if query_container in self.data_families:
-                query_path = query_container
+                query_path_str = query_container
             elif query_path_str:
                 query_container = ".".join([query_path_str, query_container])
                 if query_container in self.data_families:
-                    query_path = query_container
+                    query_path_str = query_container
         query: Optional[QuerySource] = self.data_families.get(query_path_str, {}).get(
             query_name
         )

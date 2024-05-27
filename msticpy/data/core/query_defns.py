@@ -6,13 +6,11 @@
 """Query helper definitions."""
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Dict, Type, TypeVar, Union
+from typing import Dict, Type, Union
 
 from ..._version import VERSION
 from ...common.utility import export
 
-DFAMILY = TypeVar("DFAMILY", bound="DataFamily")
-DENV = TypeVar("DENV", bound="DataEnvironment")
 
 __version__ = VERSION
 __author__ = "Ian Hellen"
@@ -43,7 +41,9 @@ class DataFamily(Enum):
     Elastic = 14
 
     @classmethod
-    def parse(cls: Type[DFAMILY], value: Union[str, int, DFAMILY, None]) -> DFAMILY:
+    def parse(
+        cls: Type["DataFamily"], value: Union[str, int, "DataFamily", None]
+    ) -> "DataFamily":
         """
         Convert string or int to enum.
 
@@ -56,27 +56,25 @@ class DataFamily(Enum):
         if isinstance(value, cls):
             return value
 
-        parsed_enum: DFAMILY = cls(0)
+        parsed_enum: DataFamily = cls.Unknown
         if isinstance(value, str):
             try:
                 parsed_enum = cls[value]
             except KeyError:
                 # match to value if case is incorrect
-                # pylint: disable=no-member
                 return next(
                     (
                         e_val
                         for e_name, e_val in cls.__members__.items()
                         if e_name.upper() == value.upper()
                     ),
-                    cls(0),
+                    cls.Unknown,
                 )
-                # pylint: enable=no-member
         if isinstance(value, int):
             try:
                 parsed_enum = cls(value)
             except ValueError:
-                parsed_enum = cls(0)
+                parsed_enum = cls.Unknown
         return parsed_enum
 
 
@@ -122,7 +120,9 @@ class DataEnvironment(Enum):
     M365DGraph = 20
 
     @classmethod
-    def parse(cls: Type[DENV], value: Union[str, int, DENV, None]) -> DENV:
+    def parse(
+        cls: Type["DataEnvironment"], value: Union[str, int, "DataEnvironment", None]
+    ) -> "DataEnvironment":
         """
         Convert string or int to enum.
 
@@ -142,7 +142,7 @@ class DataEnvironment(Enum):
                 pass
         if isinstance(value, int):
             return cls(value)
-        return cls(0)
+        return cls.Unknown
 
 
 # pylint: disable=too-few-public-methods
