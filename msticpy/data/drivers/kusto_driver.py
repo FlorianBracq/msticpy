@@ -4,7 +4,7 @@
 # license information.
 # --------------------------------------------------------------------------
 """Kusto Driver subclass."""
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 import pandas as pd
 
@@ -57,7 +57,19 @@ class KustoDriver(KqlDriver):
         self._kusto_settings: KustoClusterSettings = _get_kusto_settings()
         self._cluster_uri: Union[str, None] = None
 
-    def connect(self, connection_str: Optional[str] = None, **kwargs):
+    def connect(  # pylint: disable = too-many-arguments
+        self,
+        connection_str: Optional[str] = None,
+        *,
+        mp_az_auth: Optional[Union[bool, str, List[str]]] = "default",
+        mp_az_tenant_id: Optional[str] = None,
+        workspace: Optional[str] = None,
+        kqlmagic_args: Optional[str] = None,
+        try_token: bool = False,
+        query_source: Optional[QuerySource] = None,
+        cluster: Optional[str] = None,
+        database: Optional[str] = None,
+    ) -> None:
         """
         Connect to data source.
 
@@ -97,21 +109,22 @@ class KustoDriver(KqlDriver):
         if (
             self._cluster_uri
         ):  # This should be set by _get_connection_string called above
-            cluster_settings = self._kusto_settings.get(self._cluster_uri.casefold())
+            cluster_settings: Optional[Dict[str, Any]] = self._kusto_settings.get(
+                self._cluster_uri.casefold()
+            )
             if cluster_settings:
                 if mp_az_auth is None and cluster_settings["integrated_auth"]:
                     mp_az_auth = "default"
                 if mp_az_tenant_id is None and cluster_settings["tenant_id"]:
                     mp_az_tenant_id = cluster_settings["tenant_id"]
 
-        kwargs.pop("cluster", None)
-        kwargs.pop("database", None)
-
         super().connect(
             connection_str=self.current_connection,
             mp_az_auth=mp_az_auth,
             mp_az_tenant_id=mp_az_tenant_id,
-            **kwargs,
+            workspace=workspace,
+            kqlmagic_args=kqlmagic_args,
+            try_token=try_token,
         )
 
     def query(
@@ -257,7 +270,7 @@ class KustoDriver(KqlDriver):
             return None
         fmt_items["database"] = database
         if fmt_items.get("integrated_auth"):
-            auth_string = _KCS_CODE
+            auth_string: str = _KCS_CODE
         else:
             # Note, we don't add the secret until required at runtime to prevent
             # it hanging around in memory as much as possible.

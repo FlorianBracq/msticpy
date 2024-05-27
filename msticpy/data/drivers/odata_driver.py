@@ -108,8 +108,10 @@ class OData(DriverBase):
         *,
         delegated_auth: bool = False,
         instance: Optional[str] = None,
+        timeout: Optional[int] = None,
+        client_id: Optional[str] = None,
+        tenant_id: Optional[str] = None,
         client_secret: Optional[str] = None,
-        username: Optional[str] = None,
     ) -> None:
         """
         Connect to oauth data source.
@@ -145,7 +147,6 @@ class OData(DriverBase):
         missing_settings: List[str] = [
             setting for setting in ("tenant_id", "client_id") if setting not in cs_dict
         ]
-        auth_present: bool = bool(username or client_secret)
         if missing_settings:
             raise MsticpyUserConfigError(
                 "You must supply the following required connection parameter(s)",
@@ -154,7 +155,10 @@ class OData(DriverBase):
                 title="Missing connection parameters.",
                 help_uri=("Connecting to OData sources.", _HELP_URI),
             )
-        if not auth_present:
+        client_id = client_id or cs_dict.get("client_id")
+        tenant_id = tenant_id or cs_dict.get("tenant_id", "")
+        client_secret = client_secret or cs_dict.get("client_secret")
+        if not (client_id and tenant_id) or "username" in cs_dict:
             raise MsticpyUserConfigError(
                 "You must supply either a client_secret, or username with which to",
                 "to the connect function or add them to your msticpyconfig.yaml.",
@@ -165,11 +169,16 @@ class OData(DriverBase):
         # Default to using application based authentication
         if not delegated_auth:
             json_response: Dict[str, Any] = self._get_token_standard_auth(
-                **cs_dict,
+                tenant_id=tenant_id,
+                client_id=client_id,
+                client_secret=client_secret,
+                timeout=timeout,
             )
         else:
             json_response = self._get_token_delegate_auth(
-                **cs_dict,
+                tenant_id=tenant_id,
+                client_id=client_id,
+                username=cs_dict.get("username"),
             )
 
         self.req_headers["Authorization"] = f"Bearer {self.aad_token}"
