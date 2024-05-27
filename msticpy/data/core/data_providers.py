@@ -7,7 +7,7 @@
 import logging
 from functools import partial
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Type, Union
 
 import pandas as pd
 
@@ -95,13 +95,18 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         # pylint: enable=import-outside-toplevel
         setattr(self.__class__, "_add_pivots", add_data_queries_to_entities)
 
-        data_environment, self.environment_name = QueryProvider._check_environment(
+        parsed_environment, self.environment_name = QueryProvider._check_environment(
             data_environment
         )
 
         self._driver_kwargs = prov_args.copy()
         if driver is None:
-            self.driver_class = drivers.import_driver(data_environment)
+            if parsed_environment == DataEnvironment.Unknown:
+                self.driver_class: Type[DriverBase] = drivers.import_driver(
+                    self.environment_name
+                )
+            else:
+                self.driver_class = drivers.import_driver(parsed_environment)
             if issubclass(self.driver_class, DriverBase):
                 driver = self.driver_class(
                     data_environment=data_environment, **prov_args

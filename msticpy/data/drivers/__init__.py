@@ -6,7 +6,7 @@
 """Data provider sub-package."""
 import importlib
 from functools import singledispatch
-from typing import Dict
+from typing import Dict, Type
 
 from ..._version import VERSION
 from ..core.query_defns import DataEnvironment
@@ -42,11 +42,11 @@ _ENVIRONMENT_DRIVERS = {
     DataEnvironment.M365DGraph: ("mdatp_driver", "MDATPDriver"),
 }
 
-CUSTOM_PROVIDERS: Dict[str, type] = {}
+CUSTOM_PROVIDERS: Dict[str, Type[DriverBase]] = {}
 
 
 @singledispatch
-def import_driver(data_environment) -> type:
+def import_driver(data_environment) -> Type[DriverBase]:
     """Unsupported type for environment."""
     raise TypeError(
         "'data_environment' must be a str or DataEnvironment type.",
@@ -55,7 +55,7 @@ def import_driver(data_environment) -> type:
 
 
 @import_driver.register
-def _(data_environment: DataEnvironment) -> type:
+def _(data_environment: DataEnvironment) -> Type[DriverBase]:
     """Import driver class for a data environment."""
     mod_name, cls_name = _ENVIRONMENT_DRIVERS.get(data_environment, (None, None))
 
@@ -73,7 +73,7 @@ def _(data_environment: DataEnvironment) -> type:
 
 
 @import_driver.register
-def _(data_environment: str) -> type:
+def _(data_environment: str) -> Type[DriverBase]:
     """Import custom driver class for a data environment."""
     if plugin_cls := CUSTOM_PROVIDERS.get(data_environment):
         return plugin_cls
