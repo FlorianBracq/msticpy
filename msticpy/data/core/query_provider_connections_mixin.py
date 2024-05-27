@@ -247,8 +247,8 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         split_by: str,
         *,
         query_source: QuerySource,
-        start: datetime,
-        end: datetime,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
         progress: bool = True,
         retry_on_error: bool = False,
         debug: bool = False,
@@ -289,6 +289,9 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         executed asynchronously. Otherwise, the queries are executed sequentially.
 
         """
+        if not (start and end):
+            print("Cannot split a query with no 'start' and 'end' parameters")
+            return None
         split_queries: Dict[
             Tuple[datetime, datetime], str
         ] = self._create_split_queries(
