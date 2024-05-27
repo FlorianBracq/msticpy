@@ -159,9 +159,7 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             raise TypeError(f"Unknown data environment {data_environment}")
         if isinstance(data_environment, DataEnvironment):
             return data_environment, data_environment.name
-        error_msg: str = (
-            f"Unknown data environment type {data_environment} ({type(data_environment)})"
-        )
+        error_msg: str = f"Unknown data environment type {data_environment} ({type(data_environment)})"
         raise TypeError(error_msg)
 
     def __getattr__(self, name):
@@ -285,8 +283,8 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             )
             if split_result is not None:
                 return split_result
-            # if split queries could not be created, fall back to default
 
+        # if split queries could not be created, fall back to default
         query_str: str = query_source.create_query(
             formatters=self._query_provider.formatters, **params
         )

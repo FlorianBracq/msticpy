@@ -414,7 +414,9 @@ def _map_config_dict_name(config_dict: Dict[str, str]) -> Dict[str, str]:
 
 
 def _get_driver_settings(
-    config_name: str, alt_names: Iterable[str], instance: Optional[str] = None
+    config_name: str,
+    alt_names: Iterable[str],
+    instance: Optional[str] = None,
 ) -> Dict[str, str]:
     """Try to retrieve config settings for OAuth drivers."""
     config_key: str = f"{config_name}-{instance}" if instance else config_name

@@ -317,7 +317,9 @@ class QueryStore:
         return env_stores
 
     def get_query(
-        self, query_name: str, query_path: Optional[Union[str, DataFamily]] = None
+        self,
+        query_name: str,
+        query_path: Optional[Union[str, DataFamily]] = None,
     ) -> "QuerySource":
         """
         Return query with name `data_family` and `query_name`.
