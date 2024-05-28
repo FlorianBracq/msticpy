@@ -71,6 +71,7 @@ class OTX(HttpTIProvider):
 
     def __init__(self, **kwargs):
         """Set OTX specific settings."""
+        del kwargs
         super().__init__()
         self.require_url_encoding = True
 

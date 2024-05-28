@@ -69,6 +69,7 @@ _HELP_URL = "https://msticpy.readthedocs.io/en/latest/DataProviders/DataProv-Kus
 logger: logging.Logger = logging.getLogger(__name__)
 
 
+# pylint:disable=too-many-lines
 @dataclasses.dataclass
 class KustoConfig:
     """Kusto configuration class."""

@@ -74,7 +74,7 @@ class ElasticDriver(DriverBase):
         # cs_dict = self._get_connect_args(connection_str, **kwargs)
 
         # TBD
-
+        del kwargs
         self._connected = True
         print("connected")
 
@@ -136,7 +136,7 @@ class ElasticDriver(DriverBase):
             or query response if an error.
 
         """
-        del query_source
+        del query_source, kwargs
         if not self._connected:
             raise self._create_not_connected_err("Elastic")
 

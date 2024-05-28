@@ -67,7 +67,7 @@ class QueryProviderUtilsMixin(QueryProviderProtocol):
         return self._query_provider.connected
 
     @property
-    def connection_string(self) -> str:
+    def connection_string(self) -> Optional[str]:
         """
         Return provider connection string.
 

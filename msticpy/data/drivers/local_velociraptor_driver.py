@@ -86,7 +86,7 @@ class VelociraptorLogDriver(DriverBase):
             Connect to a data source
 
         """
-        del connection_str
+        del connection_str, kwargs
         self.data_files = self._get_logfile_paths()
         self._connected = True
 

@@ -102,7 +102,7 @@ class OData(DriverBase):
 
         """
 
-    def connect(
+    def connect(  # pylint: disable=too-many-arguments
         self,
         connection_str: Optional[str] = None,
         *,

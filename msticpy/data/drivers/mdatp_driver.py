@@ -18,6 +18,7 @@ from ...auth.cloud_mappings import (
 from ...common.data_utils import ensure_df_datetimes
 from ...common.utility import export
 from ..core.query_defns import DataEnvironment
+from ..core.query_source import QuerySource
 from .odata_driver import OData, _get_driver_settings
 
 __version__ = VERSION
@@ -102,6 +103,8 @@ class MDATPDriver(OData):
     def query(
         self,
         query: str,
+        *,
+        query_source: Optional[QuerySource] = None,
     ) -> pd.DataFrame:
         """
         Execute query string and return DataFrame of results.
@@ -120,6 +123,7 @@ class MDATPDriver(OData):
             the underlying provider result if an error.
 
         """
+        del query_source
         data, response = self.query_with_results(
             query, body=True, api_end=self.api_suffix
         )

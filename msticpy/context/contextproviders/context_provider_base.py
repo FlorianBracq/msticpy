@@ -38,7 +38,7 @@ HOSTNAME_REGEX = (
 def _validate_hostname(hostname: str, **kwargs) -> SanitizedObservable:
     """Validate that parameter is a valid hostname."""
     del kwargs
-    match_hostname: Optional[re.Match[str]] = re.compile(
+    match_hostname: Optional[re.Match] = re.compile(
         HOSTNAME_REGEX, re.I | re.X | re.M
     ).search(hostname)
     if not match_hostname:

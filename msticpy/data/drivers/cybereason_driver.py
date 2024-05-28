@@ -219,7 +219,6 @@ class CybereasonDriver(DriverBase):
         The queries are executed asynchronously.
 
         """
-
         query_tasks: Dict[str, partial] = self._create_paginated_query_tasks(
             body=body,
             page_size=page_size,
@@ -501,7 +500,7 @@ class CybereasonDriver(DriverBase):
                     df_result: pd.DataFrame = self._format_result_to_dataframe(result)
                     logger.info("Query task '%s' completed successfully.", query_id)
                     results.append(df_result)
-                except Exception:  # pylint: disable=broad-except
+                except Exception:  # pylint: disable=broad-except # noqa: W0718
                     logger.warning(
                         "Query task '%s' failed with exception", query_id, exc_info=True
                     )
@@ -514,7 +513,7 @@ class CybereasonDriver(DriverBase):
                         result = await thread_task
                         df_result = self._format_result_to_dataframe(result)
                         results.append(df_result)
-                    except Exception:  # pylint: disable=broad-except
+                    except Exception:  # pylint: disable=broad-except # noqa: W0718
                         logger.warning(
                             "Retried query task '%s' failed with exception",
                             query_id,
@@ -650,7 +649,7 @@ def _(parameters: List, param_dict: Dict[str, Any]) -> List[str]:
 def _(parameters: str, param_dict: Dict[str, Any]) -> Union[str, List[str]]:
     """Recursively find and replace parameters from query."""
     param_regex = r"{([^}]+)}"
-    matches: Optional[re.Match[str]] = re.match(param_regex, parameters)
+    matches: Optional[re.Match] = re.match(param_regex, parameters)
     if matches:
         result: List[str] = [
             param_dict.get(match, parameters) for match in matches.groups()

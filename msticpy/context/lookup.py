@@ -14,31 +14,38 @@ requests per minute for the account type that you have.
 """
 import asyncio
 import importlib
-from types import ModuleType
 import warnings
 from collections import ChainMap
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple, Union, cast
+from types import ModuleType
+from typing import (
+    Any,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Tuple,
+    Union,
+)
 
 import nest_asyncio
 import pandas as pd
 from tqdm.auto import tqdm
 
-
-from ..nbwidgets.select_item import SelectItem
 from .._version import VERSION
 from ..common.exceptions import MsticpyConfigError, MsticpyUserConfigError
 from ..common.provider_settings import (
+    ProviderSettings,
     get_provider_settings,
     reload_settings,
-    ProviderSettings,
 )
 from ..common.utility import export, is_ipython
+from ..nbwidgets.select_item import SelectItem
 from ..vis.ti_browser import browse_results
 from .lookup_result import LookupStatus
 
 # used in dynamic instantiation of providers
 from .provider_base import Provider, _make_sync
-
 
 __version__ = VERSION
 __author__ = "Florian Bracq"
@@ -669,7 +676,7 @@ class Lookup:
 
         if not (mod_name and cls_name):
             if hasattr(cls, "CUSTOM_PROVIDERS") and provider in cls.CUSTOM_PROVIDERS:
-                return cast(Provider, cls.CUSTOM_PROVIDERS[provider])
+                return cls.CUSTOM_PROVIDERS[provider]
             raise LookupError(
                 f"No provider named '{provider}'.",
                 "Possible values are:",
@@ -704,7 +711,7 @@ class Lookup:
 
             # instantiate class sending args from settings to init
             try:
-                provider_instance = provider_class(**(settings.args))
+                provider_instance: Provider = provider_class(**(settings.args))  # type: ignore
             except MsticpyConfigError as mp_ex:
                 # If the TI Provider didn't load, raise an exception
                 raise MsticpyUserConfigError(
@@ -770,7 +777,7 @@ class Lookup:
             if provider_result is None or provider_result.empty:
                 continue
             if not kwargs.get("show_not_supported", False):
-                provider_result: pd.DataFrame = provider_result[
+                provider_result = provider_result[
                     provider_result["Status"] != LookupStatus.NOT_SUPPORTED.value
                 ]
             if not kwargs.get("show_bad_item", False):

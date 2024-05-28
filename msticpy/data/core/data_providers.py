@@ -164,7 +164,10 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             raise TypeError(f"Unknown data environment {data_environment}")
         if isinstance(data_environment, DataEnvironment):
             return data_environment, data_environment.name
-        error_msg: str = f"Unknown data environment type {data_environment} ({type(data_environment)})"
+        data_env_type: str = str(type(data_environment))
+        error_msg: str = (
+            f"Unknown data environment type {data_environment} ({data_env_type})"
+        )
         raise TypeError(error_msg)
 
     def __getattr__(self, name):
@@ -207,7 +210,9 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         # if the driver supports dynamic filtering of queries,
         # filter the query store based on connect-time parameters
         if self._query_provider.filter_queries_on_connect:
-            self.query_store.apply_query_filter(self._query_provider.query_usable)
+            self.query_store.apply_query_filter(
+                self._query_provider.query_usable  # type:ignore
+            )
             refresh_query_funcs = True
         # Add any built-in or dynamically retrieved queries from driver
         if self._query_provider.has_driver_queries:

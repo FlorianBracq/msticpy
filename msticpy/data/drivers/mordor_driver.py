@@ -101,6 +101,7 @@ class MordorDriver(DriverBase):
             Connect to a data source
 
         """
+        del kwargs
         global MITRE_TECHNIQUES, MITRE_TACTICS
         cache_folder = self.save_folder if self.use_cached else None
         print("Retrieving Mitre data...")

@@ -14,7 +14,7 @@ requests per minute for the account type that you have.
 """
 
 from abc import abstractmethod
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import pandas as pd
 
@@ -317,7 +317,7 @@ class TIProvider(Provider):
         """Print usage of provider."""
         print(f"{cls.__doc__} Supported query types:")
         for ioc_key in sorted(cls._QUERIES):
-            ioc_key_elems: list[str] = ioc_key.split("-", maxsplit=1)
+            ioc_key_elems: List[str] = ioc_key.split("-", maxsplit=1)
             if len(ioc_key_elems) == 1:
                 print(f"\tioc_type={ioc_key_elems[0]}")
             if len(ioc_key_elems) == 2:

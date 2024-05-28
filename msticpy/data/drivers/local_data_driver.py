@@ -84,7 +84,7 @@ class LocalDataDriver(DriverBase):
             Connect to a data source
 
         """
-        del connection_str
+        del connection_str, kwargs
         self._connected = True
         print("Connected.")
 
