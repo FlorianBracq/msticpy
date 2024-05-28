@@ -134,7 +134,11 @@ class HttpProvider(Provider):
         """Initialize the class."""
         super().__init__()
         self._httpx_client = httpx.Client(timeout=get_http_timeout(timeout=timeout))
-        self._request_params: Dict[str, Any] = {}
+        self._request_params: Dict[str, Any] = {
+            "ApiID": None,
+            "AuthKey": None,
+            "Instance": None,
+        }
         if ApiID:
             self._request_params["ApiID"] = ApiID.strip()
         if AuthKey:
