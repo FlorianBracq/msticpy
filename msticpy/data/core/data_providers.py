@@ -237,7 +237,6 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
         split_by: Union[str, None] = None,
         progress: bool = False,
         retry_on_error: bool = False,
-        connection_str: Union[str, None] = None,
         print: bool = False,  # pylint: disable=redefined-builtin
         debug_query: bool = False,
         print_query: bool = False,
@@ -310,7 +309,6 @@ class QueryProvider(QueryProviderConnectionsMixin, QueryProviderUtilsMixin):
             progress=progress,
             retry_on_error=retry_on_error,
             default_time_params=default_time_params,
-            connection_str=connection_str,
             **{key: value for key, value in kwargs.items() if key not in params},
         )
 
