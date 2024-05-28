@@ -84,7 +84,7 @@ class DriverBase(ABC):
         """Initialize new instance."""
         self._loaded: bool = False
         self._connected: bool = False
-        self.current_connection: Optional[str] = None
+        self.current_connection: Optional[str] = ""
         self._previous_connection = False
         self.data_environment: DataEnvironment = DataEnvironment.parse(data_environment)
 
