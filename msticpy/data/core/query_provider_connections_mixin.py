@@ -292,14 +292,14 @@ class QueryProviderConnectionsMixin(QueryProviderProtocol):
         if not (start and end):
             print("Cannot split a query with no 'start' and 'end' parameters")
             return None
-        split_queries: Dict[
-            Tuple[datetime, datetime], str
-        ] = self._create_split_queries(
-            query_source=query_source,
-            start=start,
-            end=end,
-            split_by=split_by,
-            query_params=query_params,
+        split_queries: Dict[Tuple[datetime, datetime], str] = (
+            self._create_split_queries(
+                query_source=query_source,
+                start=start,
+                end=end,
+                split_by=split_by,
+                query_params=query_params,
+            )
         )
         if debug:
             return "\n\n".join(
