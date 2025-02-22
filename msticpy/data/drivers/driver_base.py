@@ -80,16 +80,24 @@ class DriverProps:
 class DriverBase(ABC):
     """Base class for data providers."""
 
-    def __init__(self: DriverBase, **kwargs) -> None:
+    def __init__(
+        self: DriverBase,
+        *,
+        data_environment: str | DataEnvironment | None,
+        max_threads: int = 4,
+        **kwargs,
+    ) -> None:
         """Initialize new instance."""
-        self._kwargs: dict[str, Any] = kwargs
+        self._kwargs: dict[str, Any] = {
+            "data_environment": data_environment,
+            "max_threads": max_threads,
+            **kwargs,
+        }
         self._loaded: bool = False
         self._connected: bool = False
         self.current_connection: str | None = None
         self._previous_connection: bool = False
-        self.data_environment: str | DataEnvironment | None = kwargs.get(
-            "data_environment",
-        )
+        self.data_environment: str | DataEnvironment | None = data_environment
         self._query_filter: dict[str, set[str]] = defaultdict(set)
         self._instance: str | None = None
 
@@ -103,7 +111,7 @@ class DriverBase(ABC):
             ),
         )
         self.set_driver_property(DriverProps.SUPPORTS_THREADING, value=False)
-        self.set_driver_property(DriverProps.MAX_PARALLEL, kwargs.get("max_threads", 4))
+        self.set_driver_property(DriverProps.MAX_PARALLEL, max_threads)
 
     def __getattr__(self: Self, attrib: Any) -> Any:
         """Return item from the properties dictionary as an attribute."""
