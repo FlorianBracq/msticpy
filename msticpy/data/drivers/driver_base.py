@@ -109,7 +109,8 @@ class DriverBase(ABC):
         """Return item from the properties dictionary as an attribute."""
         if attrib in self.properties:
             return self.properties[attrib]
-        raise AttributeError(f"{self.__class__.__name__} has no attribute '{attrib}'")
+        err_msg: str = f"{self.__class__.__name__} has no attribute '{attrib}'"
+        raise AttributeError(err_msg)
 
     @property
     def loaded(self: Self) -> bool:
@@ -276,10 +277,10 @@ class DriverBase(ABC):
         """Add an expression to the query attach filter."""
         allowed_names: set[str] = {"data_environments", "data_families", "data_sources"}
         if name not in allowed_names:
-            raise ValueError(
-                f"'name' {name} must be one of:",
-                ", ".join(f"'{name}'" for name in allowed_names),
+            err_msg: str = f"'name' {name} must be one of: " + ", ".join(
+                f"'{name}'" for name in allowed_names
             )
+            raise ValueError(err_msg)
         if isinstance(query_filter, str):
             self._query_filter[name].add(query_filter)
         else:
@@ -288,10 +289,11 @@ class DriverBase(ABC):
     def set_driver_property(self: Self, name: str, value: Any) -> None:
         """Set an item in driver properties."""
         if not DriverProps.valid_type(name, value):
-            raise TypeError(
-                f"Property '{name}' is not the correct type.",
-                f"Expected: '{DriverProps.PROPERTY_TYPES[name]}'.",
+            err_msg = (
+                f"Property '{name}' is not the correct type. "
+                f"Expected: '{DriverProps.PROPERTY_TYPES[name]}'."
             )
+            raise TypeError(err_msg)
         self.properties[name] = value
 
     def get_driver_property(self: Self, name: str) -> Any:
