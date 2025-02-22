@@ -63,7 +63,7 @@ class OSQueryLogDriver(DriverBase):
         """
         del connection_str
         self._debug = kwargs.get("debug", False)
-        super().__init__()
+        super().__init__(**kwargs)
         self._cache_file: Optional[str] = None
         self._paths: List[str] = ["."]
         # If data paths specified, use these

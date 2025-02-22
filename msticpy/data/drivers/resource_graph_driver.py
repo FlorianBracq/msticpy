@@ -47,7 +47,7 @@ class ResourceGraphDriver(DriverBase):
 
     def __init__(self, **kwargs):
         """Instantiate Azure Resource Graph Driver."""
-        super().__init__()
+        super().__init__(**kwargs)
         self.client = None
         self.sub_client = None
         self.subscription_ids = None

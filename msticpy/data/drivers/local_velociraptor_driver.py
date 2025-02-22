@@ -52,7 +52,7 @@ class VelociraptorLogDriver(DriverBase):
         del connection_str
         if kwargs.get("debug", False):
             logger.setLevel(logging.DEBUG)
-        super().__init__()
+        super().__init__(**kwargs)
 
         self._paths: List[str] = ["."]
         # If data paths specified, use these
