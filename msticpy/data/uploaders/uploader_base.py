@@ -4,10 +4,14 @@
 # license information.
 # --------------------------------------------------------------------------
 """Data uploader base class."""
+from __future__ import annotations
+
 import abc
 from abc import ABC
 
 import pandas as pd
+from httpx import Timeout
+from typing_extensions import Self
 
 from ..._version import VERSION
 from ...common.pkg_config import get_http_timeout
@@ -19,7 +23,7 @@ __author__ = "Pete Bryan"
 class UploaderBase(ABC):
     """Base class for data providers."""
 
-    def __init__(self, **kwargs):
+    def __init__(self: UploaderBase, **kwargs) -> None:
         """Initialize new instance."""
         self._kwargs = kwargs
         self.workspace = None
@@ -28,7 +32,13 @@ class UploaderBase(ABC):
         self._debug = False
 
     @abc.abstractmethod
-    def upload_file(self, file_path: str, table_name: str, delim: str = ",", **kwargs):
+    def upload_file(
+        self: Self,
+        file_path: str,
+        table_name: str,
+        delim: str = ",",
+        **kwargs,
+    ) -> None:
         """
         Upload a file to the data store.
 
@@ -45,8 +55,12 @@ class UploaderBase(ABC):
 
     @abc.abstractmethod
     def upload_folder(
-        self, folder_path: str, table_name: str = None, delim: str = ",", **kwargs
-    ):
+        self: Self,
+        folder_path: str,
+        table_name: str | None = None,
+        delim: str = ",",
+        **kwargs,
+    ) -> None:
         """
         Upload a folder of files to the data store.
 
@@ -62,7 +76,7 @@ class UploaderBase(ABC):
         """
 
     @abc.abstractmethod
-    def upload_df(self, data: pd.DataFrame, table_name: str, **kwargs):
+    def upload_df(self: Self, data: pd.DataFrame, table_name: str, **kwargs) -> None:
         """
         Upload a Pandas DataFrame to the data store.
 
