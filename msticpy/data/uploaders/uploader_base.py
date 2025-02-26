@@ -76,6 +76,13 @@ class UploaderBase(ABC):
         """
 
     @staticmethod
-    def get_http_timeout(**kwargs):
+    def get_http_timeout(
+        *,
+        timeout: int | None = None,
+        def_timeout: int | None = None,
+    ) -> Timeout:
         """Get http timeout from settings or kwargs."""
-        return get_http_timeout(**kwargs)
+        return get_http_timeout(
+            timeout=timeout,
+            def_timeout=def_timeout,
+        )

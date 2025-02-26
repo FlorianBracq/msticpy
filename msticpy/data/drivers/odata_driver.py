@@ -273,10 +273,11 @@ class OData(DriverBase):
 
         # Authenticate and obtain AAD Token for future calls
         data: bytes = urllib.parse.urlencode(req_body).encode("utf-8")
+        timeout: int | None = kwargs.get("timeout")
         response: httpx.Response = httpx.post(
             url=req_url,
             content=data,
-            timeout=self.get_http_timeout(**kwargs),
+            timeout=self.get_http_timeout(timeout=timeout),
             headers=mp_ua_header(),
         )
         json_response: dict[str, Any] = response.json()
@@ -318,6 +319,8 @@ class OData(DriverBase):
     def query_with_results(
         self: Self,
         query: str,
+        *,
+        timeout: int | None = None,
         **kwargs,
     ) -> tuple[pd.DataFrame | None, dict[str, Any]]:
         """
@@ -353,7 +356,9 @@ class OData(DriverBase):
                 url=req_url,
                 headers=self.req_headers,
                 json={"Query": query},
-                timeout=self.get_http_timeout(**kwargs),
+                timeout=self.get_http_timeout(
+                    timeout=timeout,
+                ),
             )
         else:
             # self.request_uri set if self.connected
@@ -361,7 +366,9 @@ class OData(DriverBase):
             response = httpx.get(
                 url=req_url,
                 headers=self.req_headers,
-                timeout=self.get_http_timeout(**kwargs),
+                timeout=self.get_http_timeout(
+                    timeout=timeout,
+                ),
             )
 
         self._check_response_errors(response)
