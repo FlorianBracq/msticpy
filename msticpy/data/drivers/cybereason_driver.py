@@ -29,7 +29,8 @@ from ...common.provider_settings import (
 from ...common.utility import mp_ua_header
 from ..core.query_defns import Formatters
 from ..core.query_provider_connections_mixin import _get_event_loop
-from .driver_base import DriverBase, DriverProps, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase, DriverProps
 
 __version__ = VERSION
 __author__ = "Florian Bracq"

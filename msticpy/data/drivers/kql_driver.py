@@ -30,7 +30,8 @@ from ...common.exceptions import (
 from ...common.utility import MSTICPY_USER_AGENT, export
 from ...common.wsconfig import WorkspaceConfig
 from ..core.query_defns import DataEnvironment
-from .driver_base import DriverBase, DriverProps, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase, DriverProps
 
 _KQL_ENV_OPTS = "KQLMAGIC_CONFIGURATION"
 

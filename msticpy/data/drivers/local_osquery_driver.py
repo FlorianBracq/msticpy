@@ -23,7 +23,8 @@ from ..._version import VERSION
 from ...common.exceptions import MsticpyDataQueryError, MsticpyNoDataSourceError
 from ...common.provider_settings import get_provider_settings
 from ...common.utility import export, valid_pyname
-from .driver_base import DriverBase, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase
 
 __version__ = VERSION
 __author__ = "juju4"

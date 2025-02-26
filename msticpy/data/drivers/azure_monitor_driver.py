@@ -44,7 +44,8 @@ from ...common.timespan import TimeSpan
 from ...common.utility import export, mp_ua_header
 from ...common.wsconfig import WorkspaceConfig
 from ..core.query_defns import DataEnvironment
-from .driver_base import DriverBase, DriverProps, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase, DriverProps
 
 logger = logging.getLogger(__name__)
 

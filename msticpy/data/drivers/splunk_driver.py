@@ -22,7 +22,8 @@ from ...common.exceptions import (
 )
 from ...common.utility import check_kwargs, export
 from ..core.query_defns import Formatters
-from .driver_base import DriverBase, DriverProps, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase, DriverProps
 
 try:
     import splunklib.client as sp_client

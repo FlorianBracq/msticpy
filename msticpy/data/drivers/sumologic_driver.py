@@ -22,7 +22,8 @@ from ...common.exceptions import (
 )
 from ...common.provider_settings import ProviderSettings, get_provider_settings
 from ...common.utility import check_kwargs, export
-from .driver_base import DriverBase, DriverProps, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase, DriverProps
 
 __version__ = VERSION
 __author__ = "juju4"

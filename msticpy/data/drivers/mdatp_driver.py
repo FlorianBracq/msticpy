@@ -19,7 +19,8 @@ from ...auth.cloud_mappings import (
 from ...common.data_utils import ensure_df_datetimes
 from ...common.utility import export
 from ..core.query_defns import DataEnvironment
-from .odata_driver import OData, QuerySource, _get_driver_settings
+from ..core.query_source import QuerySource
+from .odata_driver import OData, _get_driver_settings
 
 __version__ = VERSION
 __author__ = "Pete Bryan"

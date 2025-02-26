@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Mapping, Tuple
 from ..._version import VERSION
 from ...common.utility import export
 from .query_defns import QueryParamProvider
-from .query_store import QuerySource
+from .query_source import QuerySource
 
 __version__ = VERSION
 __author__ = "Ian Hellen"

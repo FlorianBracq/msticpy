@@ -12,7 +12,8 @@ import pandas as pd
 from ..._version import VERSION
 from ...common.pkg_config import get_config, has_config
 from ...common.utility import export
-from .driver_base import DriverBase, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase
 
 __version__ = VERSION
 __author__ = "Ian Hellen"

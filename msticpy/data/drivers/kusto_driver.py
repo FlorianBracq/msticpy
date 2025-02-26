@@ -13,7 +13,8 @@ from ...common.exceptions import MsticpyParameterError, MsticpyUserConfigError
 from ...common.provider_settings import ProviderArgs, get_provider_settings
 from ...common.utility import export
 from ..core.query_defns import DataEnvironment
-from .kql_driver import DriverProps, KqlDriver, QuerySource
+from ..core.query_source import QuerySource
+from .kql_driver import DriverProps, KqlDriver
 
 __version__ = VERSION
 __author__ = "Ian Hellen"

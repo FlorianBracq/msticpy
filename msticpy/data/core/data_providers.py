@@ -29,7 +29,7 @@ from .query_store import QueryStore
 if TYPE_CHECKING:
     import pandas as pd
 
-    from msticpy.data.core.query_source import QuerySource
+    from .query_source import QuerySource
 
 __version__ = VERSION
 __author__ = "Ian Hellen"

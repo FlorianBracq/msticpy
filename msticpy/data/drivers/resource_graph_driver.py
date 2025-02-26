@@ -18,7 +18,8 @@ from ...auth.azure_auth import AzureCloudConfig, az_connect
 from ...auth.azure_auth_core import only_interactive_cred
 from ...common.exceptions import MsticpyImportExtraError, MsticpyNotConnectedError
 from ...common.utility import export
-from .driver_base import DriverBase, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase
 
 try:
     from azure.mgmt.resourcegraph import ResourceGraphClient

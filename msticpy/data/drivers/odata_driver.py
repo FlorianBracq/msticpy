@@ -29,7 +29,8 @@ from ...common.exceptions import MsticpyConnectionError, MsticpyUserConfigError
 from ...common.pkg_config import get_config
 from ...common.provider_settings import get_provider_settings
 from ...common.utility import mp_ua_header
-from .driver_base import DriverBase, DriverProps, QuerySource
+from ..core.query_source import QuerySource
+from .driver_base import DriverBase, DriverProps
 
 __version__: str = VERSION
 __author__: str = "Pete Bryan"
