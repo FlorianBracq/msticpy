@@ -4,9 +4,12 @@
 # license information.
 # --------------------------------------------------------------------------
 """Keyvault client settings."""
+from __future__ import annotations
 
 import warnings
-from typing import Any, List, Optional
+from typing import Any
+
+from typing_extensions import Self
 
 from .._version import VERSION
 from ..common import pkg_config as config
@@ -50,7 +53,7 @@ class KeyVaultSettings:
     # Azure CLI Client ID
     CLIENT_ID = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"  # xplat
 
-    def __init__(self):
+    def __init__(self: KeyVaultSettings) -> None:
         """
         Initialize new instance of KeyVault Settings.
 
@@ -61,37 +64,39 @@ class KeyVaultSettings:
             msticpyconfig.yaml.
 
         """
-        self.authority: Optional[str] = None
-        self.auth_methods: List[str] = []
+        self.authority: str | None = None
+        self.auth_methods: list[str] = []
         try:
-            kv_config = config.get_config("KeyVault")
+            kv_config: dict[str, Any] = config.get_config("KeyVault")
         except KeyError as err:
             raise MsticpyKeyVaultConfigError(
                 "No KeyVault section found in msticpyconfig.yaml",
                 title="missing Key Vault configuration",
             ) from err
-        norm_settings = {key.casefold(): val for key, val in kv_config.items()}
+        norm_settings: dict[str, Any] = {
+            key.casefold(): val for key, val in kv_config.items()
+        }
         self.__dict__.update(norm_settings)
 
         self.az_cloud_config = AzureCloudConfig(self.authority)
         self._get_auth_methods_from_settings()
         self.authority = self.authority or self.az_cloud_config.cloud
 
-    def _get_auth_methods_from_settings(self):
+    def _get_auth_methods_from_settings(self: Self) -> None:
         """Retrieve authentication methods from settings."""
         self.auth_methods = self.az_cloud_config.auth_methods
 
-    def __getitem__(self, key: str):
+    def __getitem__(self: Self, key: str) -> Any:
         """Allow property get using dictionary key syntax."""
         if key.casefold() in self.__dict__:
             return self.__dict__[key.casefold()]
         raise KeyError
 
-    def __setitem__(self, key: str, value: Any):
+    def __setitem__(self: Self, key: str, value: Any) -> None:
         """Allow property set using dictionary key syntax."""
         self.__dict__[key.casefold()] = value
 
-    def __contains__(self, key: str):
+    def __contains__(self: Self, key: str) -> bool:
         """Return true if key is a valid attribute."""
         return key.casefold() in self.__dict__
 
@@ -100,12 +105,12 @@ class KeyVaultSettings:
         return self.__dict__.get(key.casefold(), default)
 
     @property
-    def cloud(self) -> str:
+    def cloud(self: Self) -> str:
         """Return the cloud for the settings."""
         return self.get("authority", "global").casefold()
 
     @property
-    def authority_uri(self) -> str:
+    def authority_uri(self: Self) -> str:
         """
         Return authority URI for cloud.
 
@@ -120,26 +125,28 @@ class KeyVaultSettings:
         return self.az_cloud_config.authority_uri
 
     @property
-    def keyvault_uri(self) -> Optional[str]:
+    def keyvault_uri(self: Self) -> str | None:
         """Return KeyVault URI template for current cloud."""
-        suffix = self.az_cloud_config.suffixes.get("keyVaultDns")
-        kv_uri = f"https://{{vault}}.{suffix}"
+        suffix: str | None = self.az_cloud_config.suffixes.get("keyVaultDns")
+        kv_uri: str = f"https://{{vault}}.{suffix}"
         if not kv_uri:
-            mssg = f"Could not find a valid KeyVault endpoint for {self.cloud}"
+            mssg: str = f"Could not find a valid KeyVault endpoint for {self.cloud}"
             warnings.warn(mssg)
         return kv_uri
 
     @property
-    def mgmt_uri(self) -> Optional[str]:
+    def mgmt_uri(self: Self) -> str | None:
         """Return Azure management URI template for current cloud."""
-        mgmt_uri = self.az_cloud_config.resource_manager
+        mgmt_uri: str = self.az_cloud_config.resource_manager
         if not mgmt_uri:
-            mssg = f"Could not find a valid KeyVault endpoint for {self.cloud}"
+            mssg: str = f"Could not find a valid KeyVault endpoint for {self.cloud}"
             warnings.warn(mssg)
         return mgmt_uri
 
     def get_tenant_authority_uri(
-        self, authority_uri: str = None, tenant: str = None
+        self: Self,
+        authority_uri: str | None = None,
+        tenant: str | None = None,
     ) -> str:
         """
         Return authority URI for tenant.
@@ -165,7 +172,7 @@ class KeyVaultSettings:
             If tenant is not defined.
 
         """
-        auth = authority_uri or self.authority_uri.strip()
+        auth: str = authority_uri or self.authority_uri.strip()
         tenant = tenant or self.get("tenantid") or self.az_cloud_config.tenant_id
         if not tenant:
             raise MsticpyKeyVaultConfigError(
@@ -178,7 +185,7 @@ class KeyVaultSettings:
         return f"{auth}/{tenant.strip()}"
 
     def get_tenant_authority_host(
-        self, authority_uri: str = None, tenant: str = None
+        self: Self, authority_uri: str | None = None, tenant: str | None = None
     ) -> str:
         """
         Return tenant authority URI with no leading scheme.

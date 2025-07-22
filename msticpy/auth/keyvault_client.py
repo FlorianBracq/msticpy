@@ -4,9 +4,11 @@
 # license information.
 # --------------------------------------------------------------------------
 """Keyvault client - adapted from Bluehound code."""
+from __future__ import annotations
+
 import base64
 import json
-from typing import Any, List
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from azure.core.exceptions import ClientAuthenticationError, ResourceNotFoundError
 from azure.keyvault.secrets import KeyVaultSecret, SecretClient
@@ -22,7 +24,9 @@ from azure.mgmt.keyvault.models import (
     VaultCreateOrUpdateParameters,
     VaultProperties,
 )
-from IPython.display import HTML, display
+from IPython.core.display import HTML
+from IPython.display import display
+from typing_extensions import Self
 
 from .._version import VERSION
 from ..common.exceptions import (
@@ -34,10 +38,12 @@ from ..common.utility import export, is_ipython
 from .azure_auth_core import az_connect_core
 from .keyvault_settings import KeyVaultSettings
 
+if TYPE_CHECKING:
+    from msticpy.auth.azure_auth_core import AzCredentials
 __version__ = VERSION
 __author__ = "Matt Richard, Ian Hellen"
 
-_KV_CLIENT_AUTH_ERROR = [
+_KV_CLIENT_AUTH_ERROR: list[str] = [
     "Retry authentication with msticpy.settings.auth_secrets_client",
     "using a different credential type.",
     "Alteratively use Azure CLI authentication:",
@@ -57,14 +63,20 @@ class BHKeyVaultClient:
 
     _KEYRING_NAME = "keyvault"
 
-    def __init__(
-        self,
-        tenant_id: str = None,
-        vault_uri: str = None,
-        vault_name: str = None,
-        settings: KeyVaultSettings = None,
+    def __init__(  # noqa: PLR0913
+        self: BHKeyVaultClient,
+        tenant_id: str | None = None,
+        vault_uri: str | None = None,
+        vault_name: str | None = None,
+        settings: KeyVaultSettings | None = None,
+        *,
+        debug: bool = False,
+        authn_type: str | None = None,
+        auth_methods: list[str] | None = None,
+        authority: str | None = None,
+        authority_uri: str | None = None,
         **kwargs,
-    ):
+    ) -> None:
         """
         Initialize the BHKeyVault client.
 
@@ -125,47 +137,60 @@ class BHKeyVaultClient:
 
 
         """
-        self.debug = kwargs.pop("debug", False)
+        self.debug: bool = debug
         self.settings: KeyVaultSettings = settings or KeyVaultSettings()
 
-        self.tenant_id = tenant_id or self.settings.get("tenantid")
-        if not self.tenant_id:
+        if not tenant_id:
+            tenant_id = self.settings.get("tenantid")
+        if not tenant_id:
+            err_msg: str = (
+                "Could not get TenantId from function parameters or configuration. "
+                "Please add this to the KeyVault section of msticpyconfig.yaml"
+            )
             raise MsticpyKeyVaultConfigError(
-                "Could not get TenantId from function parameters or configuration.",
-                "Please add this to the KeyVault section of msticpyconfig.yaml",
+                err_msg,
                 title="missing tenant ID value.",
                 azcli_uri="https://docs.microsoft.com/cli/azure/authenticate-azure-cli",
             )
-        self.authn_type = kwargs.pop(
-            "authn_type", self.settings.get("authntype", "interactive")
+        self.tenant_id: str = tenant_id
+        self.authn_type: str = authn_type or self.settings.get(
+            "authntype",
+            "interactive",
         )
-        self.auth_methods = kwargs.pop(
-            "auth_methods", self.settings.get("auth_methods", ["interactive"])
+        self.auth_methods: list[str] = auth_methods or self.settings.get(
+            "auth_methods",
+            ["interactive"],
         )
 
         # for authority and authority_uri, any parameters take priority
         # and fall back on settings if not specified.
-        if "authority" in kwargs:
-            self.settings["authority"] = kwargs.pop("authority")
-        self.authority_uri = self.settings.get_tenant_authority_host(
-            authority_uri=kwargs.get("authority_uri"), tenant=self.tenant_id
+        if authority:
+            self.settings["authority"] = authority
+        self.authority_uri: str = self.settings.get_tenant_authority_host(
+            authority_uri=authority_uri,
+            tenant=self.tenant_id,
         )
 
         self._vault_name, self.vault_uri = self._get_vault_name_and_uri(
-            vault_name, vault_uri
+            vault_name,
+            vault_uri,
         )
-        self.kv_client = self._try_credential_types(**kwargs)
+        self.kv_client: SecretClient = self._try_credential_types(**kwargs)
 
-    def _try_credential_types(self, **kwargs):
+    def _try_credential_types(
+        self: Self,
+        *,
+        credential: AzCredentials | None = None,
+        **kwargs,
+    ) -> SecretClient:
         """Try to access Key Vault to establish usable authentication method."""
-        credential = kwargs.pop("credential", None)
         if credential:
-            kv_client = SecretClient(self.vault_uri, credential=credential)
+            kv_client = SecretClient(self.vault_uri, credential=credential.legacy)
             try:
                 self._get_working_kv_client(kv_client)
             except ClientAuthenticationError as client_err:
                 _print_status(
-                    f"Could not obtain access token using {credential.__class__.__name__}."
+                    f"Could not obtain access token using {credential.__class__.__name__}.",
                 )
                 self._raise_auth_failed_error(client_err)
 
@@ -183,32 +208,43 @@ class BHKeyVaultClient:
                 if idx + 1 < len(self.auth_methods):
                     continue
                 self._raise_auth_failed_error(client_err)
-        return None
+        err_msg: str = "Failed to authenticate against keyvault."
+        raise ClientAuthenticationError(err_msg)
 
-    def _get_working_kv_client(self, kv_client):
+    def _get_working_kv_client(self: Self, kv_client: SecretClient) -> SecretClient:
         """Try to list secrets - will throw ClientAuthentication error on failure."""
         # need to list to force iterator to run
         list(kv_client.list_properties_of_secrets())
         _print_status("done")
         return kv_client
 
-    def _raise_auth_failed_error(self, client_err):
-        raise MsticpyUserConfigError(
+    def _raise_auth_failed_error(self: Self, client_err: BaseException) -> NoReturn:
+        err_msg: str = (
             "No configured authentication methods found with credentials "
-            f"with access the Key Vault '{self._vault_name}'",
-            *_KV_CLIENT_AUTH_ERROR,
+            f"with access the Key Vault '{self._vault_name}' "
+            " ".join(_KV_CLIENT_AUTH_ERROR)
+        )
+        raise MsticpyUserConfigError(
+            err_msg,
             title="Key Vault authentication configuration failed.",
         ) from client_err
 
-    def _get_vault_name_and_uri(self, vault_name, vault_uri):
+    def _get_vault_name_and_uri(
+        self: Self,
+        vault_name: str | None,
+        vault_uri: str | None,
+    ) -> tuple[str | None, str]:
         """Validate and return vault name and URI."""
         if not vault_uri and not vault_name:
             if "vaultname" in self.settings:
                 vault_name = self.settings["vaultname"]
             else:
-                raise MsticpyKeyVaultConfigError(
+                err_msg: str = (
                     "Check that you have specified the right value for VaultName"
-                    + " in your configuration",
+                    " in your configuration"
+                )
+                raise MsticpyKeyVaultConfigError(
+                    err_msg,
                     title="Key Vault vault name not found.",
                 )
         if not vault_uri:
@@ -216,19 +252,22 @@ class BHKeyVaultClient:
             if vault_uri:
                 vault_uri = vault_uri.format(vault=vault_name)
             else:
-                cloud = self.settings.cloud
+                cloud: str = self.settings.cloud
+                err_msg = (
+                    f"Could not determine keyvault URI for national cloud {cloud}. "
+                    "Please verify that you have the correct national cloud "
+                    "specified in the KeyVault section of msticpyconfig.yaml"
+                )
                 raise MsticpyKeyVaultConfigError(
-                    f"Could not determine keyvault URI for national cloud {cloud}.",
-                    "Please verify that you have the correct national cloud"
-                    + "specified in the KeyVault section of msticpyconfig.yaml",
+                    err_msg,
                     title="no Key Vault URI for national cloud",
                 )
         if self.debug:
-            print(f"Using Vault URI {vault_uri}")
+            display(f"Using Vault URI {vault_uri}")
         return vault_name, vault_uri
 
     @property
-    def vault_name(self) -> str:
+    def vault_name(self: Self) -> str:
         """Return the Key Vault name."""
         return (
             self._vault_name
@@ -236,11 +275,13 @@ class BHKeyVaultClient:
         )
 
     @property
-    def secrets(self):
+    def secrets(self: Self) -> list[str | None]:
         """Return the list of secret names from the vault."""
-        return [x.id for x in self.kv_client.list_properties_of_secrets()]
+        if self.kv_client:
+            return [x.id for x in self.kv_client.list_properties_of_secrets()]
+        return []
 
-    def get_secret(self, secret_name: str) -> Any:
+    def get_secret(self: Self, secret_name: str) -> str:
         """
         Retrieve a secret from the Vault.
 
@@ -265,26 +306,32 @@ class BHKeyVaultClient:
             # name
             secret_name = secret_name.rsplit("/", maxsplit=1)[-1]
         try:
-            secret_bundle = self.kv_client.get_secret(name=secret_name)
+            secret_bundle: KeyVaultSecret = self.kv_client.get_secret(name=secret_name)
         except ResourceNotFoundError as err:
             if self.debug:
-                print(f"Secret: '{secret_name}' missing from vault: {self.vault_uri}")
+                display(f"Secret: '{secret_name}' missing from vault: {self.vault_uri}")
+            err_msg: str = (
+                f"Secret name {secret_name} could not be found in {self.vault_uri}"
+                f"Provider returned: {err}"
+            )
             raise MsticpyKeyVaultMissingSecretError(
-                f"Secret name {secret_name} could not be found in {self.vault_uri}",
-                f"Provider returned: {err}",
+                err_msg,
                 title=f"secret {secret_name} not found.",
             ) from err
         if secret_bundle.value is None or not secret_bundle.value:
             if self.debug:
-                print(f"Secret: '{secret_name}' was empty in vault {self.vault_uri}")
+                display(f"Secret: '{secret_name}' was empty in vault {self.vault_uri}")
+            err_msg = (
+                f"Secret name {secret_name} in {self.vault_uri} "
+                "has blank or null value."
+            )
             raise MsticpyKeyVaultMissingSecretError(
-                f"Secret name {secret_name} in {self.vault_uri}",
-                "has blank or null value.",
+                err_msg,
                 title=f"secret {secret_name} empty.",
             )
         return secret_bundle.value
 
-    def set_secret(self, secret_name: str, value: Any) -> KeyVaultSecret:
+    def set_secret(self: Self, secret_name: str, value: str) -> KeyVaultSecret:
         """
         Set a secret in the Vault.
 
@@ -302,7 +349,7 @@ class BHKeyVaultClient:
 
         """
         if self.debug:
-            print(f"Storing {secret_name} in {self.vault_uri}")
+            display(f"Storing {secret_name} in {self.vault_uri}")
         return self.kv_client.set_secret(name=secret_name, value=value)
 
 
@@ -310,15 +357,17 @@ class BHKeyVaultClient:
 class BHKeyVaultMgmtClient:
     """Core KeyVault Management client."""
 
-    def __init__(
-        self,
-        tenant_id: str = None,
-        subscription_id: str = None,
-        resource_group: str = None,
-        azure_region: str = None,
-        settings: KeyVaultSettings = None,
-        **kwargs,
-    ):
+    def __init__(  # noqa: PLR0913
+        self: BHKeyVaultMgmtClient,
+        tenant_id: str | None = None,
+        subscription_id: str | None = None,
+        resource_group: str | None = None,
+        azure_region: str | None = None,
+        settings: KeyVaultSettings | None = None,
+        *,
+        debug: bool = False,
+        mgmt_uri: str | None = None,
+    ) -> None:
         """
         Initialize BH KeyVault Management Client.
 
@@ -344,37 +393,55 @@ class BHKeyVaultMgmtClient:
         KeyVault section of msticpyconfig.yaml.
 
         """
-        self.debug = kwargs.pop("debug", False)
+        self.debug: bool = debug
         self.settings: KeyVaultSettings = settings or KeyVaultSettings()
-        self.tenant_id = tenant_id or self.settings.get("tenantid")
-        if not self.tenant_id:
+        if not tenant_id:
+            tenant_id = self.settings.get("tenantid")
+        if not tenant_id:
+            err_msg: str = (
+                "Could not get TenantId from function parameters or configuration."
+                "Please add this to the KeyVault section of msticpyconfig.yaml"
+            )
             raise MsticpyKeyVaultConfigError(
-                "Could not get TenantId from function parameters or configuration.",
-                "Please add this to the KeyVault section of msticpyconfig.yaml",
+                err_msg,
                 title="missing tenant ID value.",
             )
-        self.subscription_id = subscription_id or self.settings.get("subscriptionid")
-        if not self.subscription_id:
+        self.tenant_id: str = tenant_id
+        if not subscription_id:
+            subscription_id = self.settings.get("subscriptionid")
+        if not subscription_id:
+            err_msg = (
+                "Could not get SubscriptionId from function parameters or configuration."
+                "Please add this to the KeyVault section of msticpyconfig.yaml"
+            )
             raise MsticpyKeyVaultConfigError(
-                "Could not get SubscriptionId from function parameters or configuration.",
-                "Please add this to the KeyVault section of msticpyconfig.yaml",
+                err_msg,
                 title="missing SubscriptionId value.",
             )
-        self._client_uri = kwargs.pop("mgmt_uri", None) or self.settings.mgmt_uri
-        if not self._client_uri:
-            cloud = self.settings.cloud
-            raise MsticpyKeyVaultConfigError(
-                f"Could not obtain an azure management URI for national cloud {cloud}.",
+        self.subscription_id: str = subscription_id
+
+        if not mgmt_uri:
+            mgmt_uri = self.settings.mgmt_uri
+        if not mgmt_uri:
+            cloud: str = self.settings.cloud
+            err_msg = (
+                f"Could not obtain an azure management URI for national cloud {cloud}. "
                 "Please verify that you have the correct national cloud"
-                + "specified in the KeyVault section of msticpyconfig.yaml",
+                "specified in the KeyVault section of msticpyconfig.yaml"
+            )
+            raise MsticpyKeyVaultConfigError(
+                err_msg,
                 title="no Azure Management URI for national cloud",
             )
+        self._client_uri: str = mgmt_uri
 
-        self.auth_client = az_connect_core()
-        self.resource_group = resource_group or self.settings.get("resourcegroup")
-        self.azure_region = azure_region or self.settings.get("azureregion")
+        self.auth_client: AzCredentials = az_connect_core()
+        self.resource_group: str | None = resource_group or self.settings.get(
+            "resourcegroup",
+        )
+        self.azure_region: str | None = azure_region or self.settings.get("azureregion")
 
-    def list_vaults(self) -> List[str]:
+    def list_vaults(self: Self) -> list[str | None]:
         """
         Return a list of vaults for the subscription.
 
@@ -389,7 +456,7 @@ class BHKeyVaultMgmtClient:
         # pylint: disable=no-value-for-parameter
         return [v.name for v in mgmt.vaults.list()]
 
-    def get_vault_uri(self, vault_name: str) -> str:
+    def get_vault_uri(self: Self, vault_name: str) -> str | None:
         """
         Return the URI for a vault name.
 
@@ -408,15 +475,18 @@ class BHKeyVaultMgmtClient:
         try:
             vault = mgmt.vaults.get(self.resource_group, vault_name)
         except ResourceNotFoundError as cloud_err:
-            raise MsticpyKeyVaultConfigError(
+            err_msg: str = (
                 "Check that you have specified the right value for VaultName"
-                + " in your configuration",
+                " in your configuration"
+            )
+            raise MsticpyKeyVaultConfigError(
+                err_msg,
                 f"Error returned from provider was {cloud_err}",
                 title=f"Key Vault vault '{vault_name}' not found.",
             ) from cloud_err
         return vault.properties.vault_uri
 
-    def create_vault(self, vault_name: str) -> Vault:
+    def create_vault(self: Self, vault_name: str) -> Vault:
         """
         Create new or update existing vault.
 
@@ -432,37 +502,50 @@ class BHKeyVaultMgmtClient:
 
         """
         if not self.azure_region:
+            err_msg: str = (
+                "Could not get Azure region in which to create the vault. "
+                "Please add AzureRegion to the KeyVault section of msticpyconfig.yaml"
+            )
             raise MsticpyKeyVaultConfigError(
-                "Could not get Azure region in which to create the vault.",
-                "Please add AzureRegion to the KeyVault section of msticpyconfig.yaml",
+                err_msg,
                 title="missing AzureRegion value.",
             )
-        parameters = self._get_params()
+        parameters: VaultCreateOrUpdateParameters = self._get_params()
         if not self.resource_group:
+            err_msg = (
+                "Could not get Azure resource group in which to create the vault. "
+                "Please add ResourceGroup to the KeyVault section of msticpyconfig.yaml"
+            )
             raise MsticpyKeyVaultConfigError(
-                "Could not get Azure resource group in which to create the vault.",
-                "Please add ResourceGroup to the KeyVault section of msticpyconfig.yaml",
+                err_msg,
                 title="missing ResourceGroup value.",
             )
         mgmt = KeyVaultManagementClient(self.auth_client.modern, self.subscription_id)
         return mgmt.vaults.create_or_update(
-            self.resource_group, vault_name, parameters
+            self.resource_group,
+            vault_name,
+            parameters,
         ).result()
 
-    def _get_params(self):
+    def _get_params(self: Self) -> VaultCreateOrUpdateParameters:
         """Build the vault parameters block."""
         # pylint: disable=no-member
-        oid = _user_oid(self.auth_client.legacy.token)
-        sec_perms_all = [perm.value for perm in SecretPermissions]
-        key_perms_all = [perm.value for perm in KeyPermissions]
-        cert_perms_all = [perm.value for perm in CertificatePermissions]
-        permissions = Permissions()
+        oid: str | None = _user_oid(self.auth_client.legacy.token)
+        if not oid:
+            err_msg: str = "Failed to retrieve oid"
+            raise ValueError(err_msg)
+        sec_perms_all: list[str] = [perm.value for perm in SecretPermissions]
+        key_perms_all: list[str] = [perm.value for perm in KeyPermissions]
+        cert_perms_all: list[str] = [perm.value for perm in CertificatePermissions]
+        permissions: Permissions = Permissions()
         permissions.keys = key_perms_all
         permissions.secrets = sec_perms_all
         permissions.certificates = cert_perms_all
 
         policy = AccessPolicyEntry(
-            tenant_id=self.tenant_id, object_id=oid, permissions=permissions
+            tenant_id=self.tenant_id,
+            object_id=oid,
+            permissions=permissions,
         )
 
         properties = VaultProperties(
@@ -470,8 +553,18 @@ class BHKeyVaultMgmtClient:
             sku=Sku(name="standard", family="A"),
             access_policies=[policy],
         )
+        if not self.azure_region:
+            err_msg = (
+                "Could not get Azure region in which to create the vault. "
+                "Please add AzureRegion to the KeyVault section of msticpyconfig.yaml"
+            )
+            raise MsticpyKeyVaultConfigError(
+                err_msg,
+                title="missing AzureRegion value.",
+            )
         parameters = VaultCreateOrUpdateParameters(
-            location=self.azure_region, properties=properties
+            location=self.azure_region,
+            properties=properties,
         )
         parameters.properties.enabled_for_deployment = True
         parameters.properties.enabled_for_disk_encryption = True
@@ -479,7 +572,7 @@ class BHKeyVaultMgmtClient:
         return parameters
 
 
-def _user_oid(token) -> str:
+def _user_oid(token: str) -> str | None:
     """
     Return the user Object ID.
 
@@ -489,21 +582,25 @@ def _user_oid(token) -> str:
         User OID.
 
     """
-    data = _get_parsed_token_data(token)
+    data: dict[str, Any] = _get_parsed_token_data(token)
     return data.get("oid")
 
 
-def _get_parsed_token_data(token) -> Any:
-    tok_data = token
+def _get_parsed_token_data(token: str) -> dict[str, Any]:
+    tok_data: str = token
     tok_data = tok_data.split(".")[1]
     tok_data += "=" * ((4 - len(tok_data) % 4) % 4)
     return json.loads(base64.b64decode(tok_data))
 
 
-def _print_status(message, newline=True):
+def _print_status(
+    message: str,
+    *,
+    newline: bool = True,
+) -> None:
     if is_ipython():
-        line_break = "<br>" if newline else ""
+        line_break: str = "<br>" if newline else ""
         display(HTML(f"{message}{line_break}"))
     else:
         line_break = "\n" if newline else ""
-        print(message, end=line_break)
+        display(message, end=line_break)
